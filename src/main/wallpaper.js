@@ -110,44 +110,44 @@ function attachToDesktop(browserWindow, physicalBounds) {
     const result = [0]
     f.SendMessageTimeoutW(progman, 0x052c, 0, 0, 0x0000, 1000, result)
 
-    // Классическая схема (до Win11 24H2): SHELLDLL_DefView живёт в отдельном
-    // WorkerW верхнего уровня, а нужный нам WorkerW — его сосед по z-порядку.
-    let workerw = 0
-    const cb = f.koffi.register((topHwnd) => {
-      const shellView = f.FindWindowExW(topHwnd, 0, 'SHELLDLL_DefView', null)
-      if (shellView) {
-        // Нужный WorkerW — следующий за этим окном верхнего уровня
-        workerw = f.FindWindowExW(0, topHwnd, 'WorkerW', null)
-      }
-      return true
-    }, f.koffi.pointer(f.koffi.proto('__stdcall', 'EnumWindowsProc2', 'bool', ['intptr', 'intptr'])))
+    // Определяем раскладку рабочего стола.
+    // Новая (Win11 24H2+): слой иконок SHELLDLL_DefView — ребёнок Progman.
+    // Старая (Win10 / ранние Win11): DefView живёт в отдельном WorkerW
+    // верхнего уровня, а пустой WorkerW-сосед лежит ПОЗАДИ иконок.
+    const defViewInProgman = f.FindWindowExW(progman, 0, 'SHELLDLL_DefView', null)
 
-    f.EnumWindows(cb, 0)
-    f.koffi.unregister(cb)
-
-    if (workerw) {
-      // Старая схема: WorkerW уже лежит позади иконок, просто входим в него
-      f.SetParent(hwnd, workerw)
+    if (defViewInProgman) {
+      // ---- Новая раскладка ----
+      // Любой WorkerW внутри Progman здесь стоит НАД иконками — в него
+      // входить нельзя (видео закроет ярлыки). Правильно: стать ребёнком
+      // Progman и встать в z-порядке СРАЗУ ПОД слоем иконок.
+      f.SetParent(hwnd, progman)
+      // SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE = 0x0001 | 0x0002 | 0x0010
+      // hWndInsertAfter = defView -> наше окно размещается ЗА (ниже) иконок
+      f.SetWindowPos(hwnd, defViewInProgman, 0, 0, 0, 0, 0x0013)
     } else {
-      // Windows 11 24H2+: SHELLDLL_DefView находится прямо внутри Progman,
-      // и после 0x052C WorkerW создаётся тоже КАК РЕБЁНОК Progman.
-      const workerwInProgman = f.FindWindowExW(progman, 0, 'WorkerW', null)
-      if (workerwInProgman) {
-        f.SetParent(hwnd, workerwInProgman)
-      } else {
-        // Совсем крайний случай: WorkerW нет вообще. Становимся ребёнком
-        // Progman, но новое дочернее окно встаёт НАВЕРХ z-порядка — поверх
-        // иконок. Явно опускаем себя ПОД слой иконок (SHELLDLL_DefView).
-        f.SetParent(hwnd, progman)
-        const defView = f.FindWindowExW(progman, 0, 'SHELLDLL_DefView', null)
-        // SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE = 0x0002 | 0x0001 | 0x0010
-        if (defView) {
-          // Встаём в z-порядке сразу ПОСЛЕ (то есть ПОД) слоем иконок
-          f.SetWindowPos(hwnd, defView, 0, 0, 0, 0, 0x0013)
-        } else {
-          // HWND_BOTTOM = 1 — в самый низ
-          f.SetWindowPos(hwnd, 1, 0, 0, 0, 0, 0x0013)
+      // ---- Старая раскладка ----
+      let workerw = 0
+      const cb = f.koffi.register((topHwnd) => {
+        const shellView = f.FindWindowExW(topHwnd, 0, 'SHELLDLL_DefView', null)
+        if (shellView) {
+          // Нужный WorkerW — следующий за этим окном верхнего уровня
+          workerw = f.FindWindowExW(0, topHwnd, 'WorkerW', null)
         }
+        return true
+      }, f.koffi.pointer(f.koffi.proto('__stdcall', 'EnumWindowsProc2', 'bool', ['intptr', 'intptr'])))
+
+      f.EnumWindows(cb, 0)
+      f.koffi.unregister(cb)
+
+      if (workerw) {
+        // WorkerW уже лежит позади иконок — просто входим в него
+        f.SetParent(hwnd, workerw)
+      } else {
+        // Фоллбек: прикрепляемся к Progman и уходим в самый низ z-порядка
+        f.SetParent(hwnd, progman)
+        // HWND_BOTTOM = 1
+        f.SetWindowPos(hwnd, 1, 0, 0, 0, 0, 0x0013)
       }
     }
 
