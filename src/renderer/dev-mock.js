@@ -61,6 +61,7 @@ if (!window.api) {
       autoResume: true,
       activeClipId: '1',
       theme: 'night',
+      language: 'ru',
     },
     wallpaperActive: true,
     pausedByFullscreen: false,

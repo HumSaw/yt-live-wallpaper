@@ -29,6 +29,7 @@ const DEFAULT_STATE = {
     autoResume: true,
     activeClipId: null,
     theme: 'night', // тема панели: 'night' | 'day'
+    language: null, // null = определить по языку системы при первом запуске
   },
 }
 

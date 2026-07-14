@@ -150,12 +150,23 @@ body {
   background: linear-gradient(180deg, var(--hero-fade-top) 0%, var(--hero-fade-mid) 55%, var(--hero-fade) 100%);
 }
 
-/* переключатель темы */
-.theme-toggle {
+/* для японского и китайского декоративная кана дублирует текст — прячем */
+html[lang='ja'] .btn-kana,
+html[lang='zh'] .btn-kana { display: none; }
+
+/* язык + тема в правом верхнем углу шапки */
+.hero-controls {
   position: absolute;
   top: 14px;
   right: 52px;
   z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle,
+.lang-select {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -171,7 +182,33 @@ body {
   transition: border-color 0.15s, background 0.15s;
 }
 
-.theme-toggle:hover { border-color: var(--cyan); }
+.lang-select {
+  appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23ffffff'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.lang-select option {
+  background: #12121d;
+  color: #eeedf5;
+}
+
+.theme-toggle:hover,
+.lang-select:hover { border-color: var(--cyan); }
+
+[data-theme='day'] .lang-select {
+  background-color: rgba(255, 253, 247, 0.55);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%232b2620'/%3E%3C/svg%3E");
+  border-color: rgba(43, 38, 32, 0.25);
+  color: #2b2620;
+}
+
+[data-theme='day'] .lang-select option {
+  background: #fffdf7;
+  color: #2b2620;
+}
 
 .theme-toggle-icon {
   width: 10px;
@@ -766,7 +803,7 @@ input:focus {
   border-radius: 12px;
 }
 
-/* --- р��жимы --- */
+/* --- р����жимы --- */
 
 .mode-grid {
   display: flex;

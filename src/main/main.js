@@ -260,7 +260,7 @@ function startClipDownload(clip) {
 
   downloader
     .downloadClip(clip, (progress) => {
-      // Прогресс — только в память и в UI, без записи на диск
+      // Прогресс — то��ько в память и в UI, без записи на диск
       store.updateClip(clip.id, { progress }, { persist: false })
       broadcastState()
     })
@@ -412,6 +412,8 @@ function registerIpc() {
     autostart: (v) => !!v,
     autoResume: (v) => !!v,
     theme: (v) => (['night', 'day'].includes(v) ? v : undefined),
+    language: (v) =>
+      ['ru', 'en', 'es', 'pt', 'de', 'fr', 'ja', 'zh', 'ko', 'pl'].includes(v) ? v : undefined,
   }
 
   function sanitizeSettingsPatch(raw) {
