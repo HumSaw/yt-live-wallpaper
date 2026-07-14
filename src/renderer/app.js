@@ -10,10 +10,24 @@ function applyTheme() {
   $('theme-toggle-label').textContent = theme === 'day' ? 'Ночь' : 'День'
 }
 
+function renderSetup() {
+  const overlay = $('setup-overlay')
+  const setup = state.setup
+  overlay.classList.toggle('hidden', !setup)
+  if (!setup) return
+
+  const hasError = !!setup.error
+  $('setup-error-box').classList.toggle('hidden', !hasError)
+  $('setup-error').textContent = setup.error || ''
+  $('setup-label').textContent = hasError ? '' : setup.label || 'Подготовка…'
+  $('setup-fill').style.width = `${setup.percent || 0}%`
+}
+
 function render() {
   if (!state) return
 
   applyTheme()
+  renderSetup()
 
   const badge = $('status-badge')
   const statusText = $('status-text')
@@ -309,6 +323,13 @@ $('autostart').addEventListener('change', (e) => {
 
 $('auto-resume').addEventListener('change', (e) => {
   window.api.setSettings({ autoResume: e.target.checked })
+})
+
+$('btn-setup-retry').addEventListener('click', async () => {
+  $('setup-error-box').classList.add('hidden')
+  $('setup-label').textContent = 'Подготовка…'
+  state = await window.api.retrySetup()
+  render()
 })
 
 $('btn-update-ytdlp').addEventListener('click', async () => {

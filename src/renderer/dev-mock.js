@@ -70,9 +70,11 @@ if (!window.api) {
       { id: '101', label: 'Монитор 2 (2560×1440)', primary: false },
     ],
     platformSupported: true,
+    setup: null, // поставь { label: 'Загрузчик видео (yt-dlp)', percent: 42, error: null } для проверки оверлея
   }
   window.api = {
     getState: () => Promise.resolve(mockState),
+    retrySetup: () => Promise.resolve(mockState),
     addClip: () => Promise.resolve({ clip: {} }),
     addLocalFile: () => Promise.resolve({ clip: {} }),
     removeClip: () => Promise.resolve(true),

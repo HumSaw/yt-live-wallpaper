@@ -1,10 +1,11 @@
 // Скачивание YouTube-видео (целиком или отрезком) через yt-dlp (+ ffmpeg),
 // миниатюры клипов, добавление локальных файлов, обновление yt-dlp.
-// Бинарники ожидаются в папке bin/ (кладутся скриптом `npm run setup`) либо в PATH.
+// Пути к бинарникам даёт bin-manager (dev bin/, resources/bin, userData/bin, PATH).
 
 const { spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
+const { binPath, ffmpegDir } = require('./bin-manager')
 
 let videosDir = null
 let thumbsDir = null
@@ -54,30 +55,6 @@ function validateLocalFile(filePath) {
   const ext = path.extname(filePath).toLowerCase()
   if (!LOCAL_VIDEO_EXT.has(ext)) {
     return `Формат ${ext || '(без расширения)'} не поддерживается. Нужен: mp4, webm, mkv, mov`
-  }
-  return null
-}
-
-function binDirCandidates() {
-  const dirs = [path.join(__dirname, '..', '..', 'bin')]
-  // В собранном приложении (electron-builder) бинарники лежат в resources/bin
-  if (process.resourcesPath) dirs.push(path.join(process.resourcesPath, 'bin'))
-  return dirs
-}
-
-function binPath(name) {
-  const exe = process.platform === 'win32' ? `${name}.exe` : name
-  for (const dir of binDirCandidates()) {
-    const p = path.join(dir, exe)
-    if (fs.existsSync(p)) return p
-  }
-  return name // надеемся на PATH
-}
-
-function ffmpegDir() {
-  const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
-  for (const dir of binDirCandidates()) {
-    if (fs.existsSync(path.join(dir, exe))) return dir
   }
   return null
 }
@@ -223,9 +200,7 @@ function downloadClip(clip, onProgress) {
     proc.on('error', (err) => {
       if (err.code === 'ENOENT') {
         reject(
-          new Error(
-            'yt-dlp не найден. Запустите `npm run setup`, чтобы скачать yt-dlp и ffmpeg в папку bin/.'
-          )
+          new Error('yt-dlp не найден — перезапустите приложение, компоненты докачаются автоматически')
         )
       } else {
         reject(err)
@@ -254,7 +229,7 @@ function updateYtDlp() {
         ok: false,
         message:
           err.code === 'ENOENT'
-            ? 'yt-dlp не найден — запустите `npm run setup`'
+            ? 'yt-dlp не найден — перезапустите приложение'
             : String(err.message || err),
       })
     })

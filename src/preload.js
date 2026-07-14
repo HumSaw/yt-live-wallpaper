@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   stopWallpaper: () => ipcRenderer.invoke('wallpaper:stop'),
   nextClip: () => ipcRenderer.invoke('wallpaper:next'),
   updateYtDlp: () => ipcRenderer.invoke('ytdlp:update'),
+  retrySetup: () => ipcRenderer.invoke('setup:retry'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   onStateUpdate: (cb) => {
     const listener = (_e, state) => cb(state)

@@ -9,6 +9,22 @@
 <body>
   <div class="noise" aria-hidden="true"></div>
 
+  <div id="setup-overlay" class="setup-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <div class="setup-box">
+      <p class="setup-kana" aria-hidden="true">準備中</p>
+      <h2 id="setup-title">Первый запуск</h2>
+      <p class="setup-sub">Докачиваю компоненты для работы с видео — это один раз и займёт около минуты</p>
+      <div class="setup-progress">
+        <div class="progress setup-bar"><div id="setup-fill" class="progress-fill"></div></div>
+        <p id="setup-label" class="setup-label">Подготовка…</p>
+      </div>
+      <div id="setup-error-box" class="hidden">
+        <p id="setup-error" class="form-error"></p>
+        <button id="btn-setup-retry" class="btn btn-primary" type="button">Попробовать ещё раз</button>
+      </div>
+    </div>
+  </div>
+
   <div class="app">
     <header class="hero">
       <img class="hero-art hero-art-night" src="../../assets/header-art.png" alt="" aria-hidden="true" />

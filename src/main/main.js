@@ -4,6 +4,7 @@ const store = require('./store')
 const downloader = require('./downloader')
 const wallpaper = require('./wallpaper')
 const fullscreenMonitor = require('./fullscreen-monitor')
+const binManager = require('./bin-manager')
 
 const IS_WINDOWS = process.platform === 'win32'
 
@@ -15,6 +16,8 @@ let playlistTimer = null
 let currentClipId = null
 let pausedByMonitor = false // пауза из-за полного экрана / перекрытого стола
 let pausedByBattery = false
+// Первичная установка yt-dlp/ffmpeg: null = всё готово
+let setupState = null
 
 function readyClips() {
   return store.get().clips.filter((c) => c.status === 'ready')
@@ -236,6 +239,7 @@ function getStateForRenderer() {
     pausedByBattery,
     displays: displaysForRenderer(),
     platformSupported: IS_WINDOWS,
+    setup: setupState, // null = компоненты готовы, иначе { label, percent, error }
   }
 }
 
@@ -274,10 +278,36 @@ function startClipDownload(clip) {
     })
 }
 
+// Первый запуск: докачиваем yt-dlp/ffmpeg, если их нет рядом с приложением
+async function runFirstTimeSetup() {
+  const missing = await binManager.missingBinaries()
+  if (missing.length === 0) {
+    setupState = null
+    return
+  }
+
+  setupState = { label: 'Подготовка…', percent: 0, error: null }
+  broadcastState()
+
+  const result = await binManager.ensureBinaries(({ label, percent }) => {
+    setupState = { label, percent, error: null }
+    broadcastState()
+  })
+
+  setupState = result.ok ? null : { label: '', percent: 0, error: result.error }
+  broadcastState()
+}
+
 function registerIpc() {
   ipcMain.handle('state:get', () => getStateForRenderer())
 
+  ipcMain.handle('setup:retry', async () => {
+    await runFirstTimeSetup()
+    return getStateForRenderer()
+  })
+
   ipcMain.handle('clip:add', async (_e, { url, start, end }) => {
+    if (setupState) return { error: 'Дождитесь установки компонентов' }
     const urlError = downloader.validateUrl(url)
     if (urlError) return { error: urlError }
 
@@ -366,7 +396,7 @@ function registerIpc() {
     if (store.get().settings.playbackMode === 'sequence') playNextClip()
   })
 
-  // Renderer не должен уметь записать в настройки произвольные ключи/значения
+  // Renderer не должен уметь записать в настройки произв��льные ключи/значения
   const SETTING_VALIDATORS = {
     volume: (v) => (typeof v === 'number' ? Math.min(1, Math.max(0, v)) : undefined),
     muted: (v) => !!v,
@@ -539,9 +569,16 @@ if (!gotLock) {
   app.whenReady().then(() => {
     store.init(app.getPath('userData'))
     downloader.init(app.getPath('userData'))
+    binManager.init(app.getPath('userData'))
     registerIpc()
     createTray()
     setupPowerMonitor()
+
+    // Не блокируем запуск: окно откроется сразу, прогресс уйдёт в UI
+    runFirstTimeSetup().catch((err) => {
+      setupState = { label: '', percent: 0, error: String(err.message || err) }
+      broadcastState()
+    })
 
     const startHidden = process.argv.includes('--hidden')
     if (!startHidden) createControlWindow()
