@@ -2,229 +2,264 @@
 
 # YT Live Wallpaper
 
-**Любое видео с YouTube — живые 4K-обои твоего рабочего стола.**
+**Turn any YouTube video into a live 4K wallpaper for your desktop.**
 
-Вставил ссылку → приложение само скачало → видео крутится за иконками вместо статичной картинки.
+Paste a link → the app downloads it → the video plays behind your desktop icons instead of a static image.
 
+**English** | [Русский](docs/README.ru.md)
+
+[![CI](https://github.com/HumSaw/yt-live-wallpaper/actions/workflows/ci.yml/badge.svg)](https://github.com/HumSaw/yt-live-wallpaper/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/HumSaw/yt-live-wallpaper?color=ff4d8d)](https://github.com/HumSaw/yt-live-wallpaper/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/HumSaw/yt-live-wallpaper/total?color=47848f)](https://github.com/HumSaw/yt-live-wallpaper/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0078d4)
-![Electron](https://img.shields.io/badge/Electron-33-47848f)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff4d8d)
 
 <br />
 
-<img src="docs/screenshot-night.png" alt="Панель управления — неоновая ночная тема" width="720" />
+<img src="docs/screenshot-wide.png" alt="Control panel — wide two-column layout" width="840" />
 
-<sub>Неоновая ночь и тёплый день — темы переключаются одной кнопкой. Интерфейс на 10 языках.</sub>
-
-<img src="docs/screenshot-day.png" alt="Панель управления — дневная тема" width="720" />
+<sub>Neon night and warm day themes, switchable with one click. UI in 10 languages.</sub>
 
 </div>
 
 ---
 
-**English TL;DR:** Turn any YouTube video into a live 4K wallpaper on Windows,
-macOS or Linux. Paste a link — the app downloads it (whole or a timestamped section)
-and plays it behind your desktop icons (WorkerW on Windows, desktop window level
-on macOS, desktop-type window on Linux/X11). Playlists, crossfade, multi-monitor,
-auto-pause in games and on battery, 10 UI languages. Installers in
-[Releases](../../releases/latest); yt-dlp is fetched automatically on first run.
+## Install in two clicks
 
----
-
-## Установка за пару кликов
-
-1. Скачайте пакет для своей системы из [последнего релиза](../../releases/latest):
+1. Download the package for your OS from the [latest release](https://github.com/HumSaw/yt-live-wallpaper/releases/latest):
    - **Windows** — `YT-Live-Wallpaper-Setup-x.x.x.exe`
    - **macOS** — `YT-Live-Wallpaper-x.x.x-mac.dmg`
    - **Linux** — `YT-Live-Wallpaper-x.x.x-linux.AppImage`
-2. Запустите — приложение откроется само
-3. При первом запуске приложение само докачает компоненты для работы с видео —
-   с прогрессом на экране, один раз. На macOS/Linux дополнительно нужен ffmpeg
-   из пакетного менеджера (`brew install ffmpeg` / `sudo apt install ffmpeg`) —
-   приложение подскажет, если его нет
+2. Run it — the app opens by itself
+3. On first launch the app fetches the video tooling it needs, once, with
+   on-screen progress. On macOS/Linux you also need ffmpeg from your package
+   manager (`brew install ffmpeg` / `sudo apt install ffmpeg`) — the app will
+   tell you if it's missing
 
-Всё. Вставьте ссылку на YouTube — через минуту у вас живые обои.
+That's it. Paste a YouTube link — you'll have a live wallpaper in a minute.
 
-> Windows SmartScreen может предупредить о неизвестном издателе (приложение не подписано
-> сертификатом — он стоит денег). Нажмите «Подробнее» → «Выполнить в любом случае».
+> Windows SmartScreen may warn about an unknown publisher (the app isn't
+> code-signed — certificates cost money). Click "More info" → "Run anyway".
 
-## Возможности
+## Features
 
-- **YouTube до 4K** — целиком или отрезком по таймкодам (`1:20` – `1:50`)
-- **Свои файлы** — перетащите mp4/webm/mkv/mov прямо в окно
-- **Три режима цикла** — один клип по кругу / друг за другом / смена по таймеру
-- **Плавный кроссфейд** между клипами, без чёрного моргания
-- **Несколько мониторов** — обои на основном, выбранном или на всех
-- **Умная экономия GPU** — пауза при играх, полноэкранных приложениях, развёрнутых окнах, на батарее и при блокировке экрана
-- **Звук** с регулятором и mute (по желанию)
-- **Трей** — запуск/стоп, следующий клип, звук без открытия панели
-- **Две темы панели** — неоновая ночь и тёплый день, с анимацией боя в шапке
-- **Автозапуск** с Windows
+- **YouTube up to 4K** — the whole video or a section by timestamps (`1:20` – `1:50`)
+- **Local files** — drag mp4/webm/mkv/mov right into the window
+- **Three loop modes** — single clip on repeat / one after another / switch on a timer
+- **Smooth crossfade** between clips, no black flicker
+- **Multi-monitor** — wallpaper on the primary, a specific, or all displays
+- **Smart GPU saving** — pauses during games, fullscreen apps, maximized windows, on battery, and when the screen is locked
+- **Audio** with a volume slider and mute (optional)
+- **Tray** — start/stop, next clip, and sound without opening the panel
+- **Two panel themes** — neon night and warm day, with animated rain in the header
+- **Autostart** with the system (Windows/macOS)
 
-## Запуск из исходников
+<div align="center">
+<img src="docs/screenshot-night.png" alt="Night theme" width="400" /> <img src="docs/screenshot-day.png" alt="Day theme" width="400" />
+</div>
 
-Без терминала: дважды кликните **`run-dev.bat`** — при первом запуске он сам
-поставит зависимости и откроет приложение. Нужен только [Node.js](https://nodejs.org).
+## Run from source
 
-Или из терминала (Node.js 20+, pnpm или npm):
+No terminal (Windows): double-click **`run-dev.bat`** — on first run it installs
+dependencies and opens the app. All you need is [Node.js](https://nodejs.org).
 
-```bash
-pnpm install    # зависимости
-pnpm start      # запуск — yt-dlp и ffmpeg докачаются сами при первом старте
-```
-
-Опционально: `pnpm setup` заранее положит yt-dlp и ffmpeg в `bin/` проекта.
-
-## Сборка установщика
-
-Без терминала: дважды кликните **`build-installer.bat`** — он сам поставит зависимости,
-скачает yt-dlp/ffmpeg, соберёт установщик и откроет папку `dist/` с готовым
-`YT-Live-Wallpaper-Setup-x.x.x.exe`. Нужен только установленный [Node.js](https://nodejs.org).
-
-Или из терминала:
+Or from a terminal (Node.js 20+, pnpm or npm):
 
 ```bash
-pnpm dist       # готовый .exe появится в dist/
+pnpm install    # dependencies
+pnpm start      # run — yt-dlp and ffmpeg are fetched automatically on first start
 ```
 
-Установщик самодостаточен — на целевом ПК не нужны ни Node.js, ни Python.
-Если перед сборкой выполнить `pnpm setup`, бинарники запакуются внутрь установщика
-и первый запуск у пользователей будет мгновенным; без этого приложение докачает их само.
+Optional: `pnpm setup` pre-downloads yt-dlp and ffmpeg into the project's `bin/`.
 
-Релизы собираются автоматически: пуш тега `v*` запускает GitHub Actions
-(`.github/workflows/release.yml`), который собирает пакеты для Windows (.exe),
-macOS (.dmg) и Linux (.AppImage) и прикрепляет их к релизу.
+## Build the installer
 
-## Как это работает
+No terminal (Windows): double-click **`build-installer.bat`** — it installs
+dependencies, fetches yt-dlp/ffmpeg, builds the installer, and opens the `dist/`
+folder with the ready `YT-Live-Wallpaper-Setup-x.x.x.exe`. All you need is
+[Node.js](https://nodejs.org).
 
-- **Скачивание** — [yt-dlp](https://github.com/yt-dlp/yt-dlp) с `--download-sections`
-  вырезает нужный отрезок прямо при загрузке (точная вырезка через ffmpeg).
-- **Обои (Windows)** — трюк с окном `WorkerW`: приложение шлёт `Progman` сообщение `0x052C`,
-  Windows создаёт слой позади иконок рабочего стола, и туда через `SetParent`
-  (koffi → `user32.dll`) встраивается окно Electron с `<video>`.
-  На каждый монитор — своё окно с пересчётом координат виртуального экрана.
-- **Обои (macOS)** — уровень NSWindow опускается до `kCGDesktopWindowLevel`
-  (koffi → objc-runtime) — ниже слоя иконок, видео за ярлыками.
-- **Обои (Linux)** — окно создаётся с типом `desktop` (X11) и живёт на уровне
-  фона рабочего стола.
-- **Кроссфейд** — два слоя `<video>`: новый клип грузится в скрытый слой
-  и плавно проявляется поверх старого.
-- **Пауза при играх** — раз в 2 секунды проверяется, покрывает ли активное окно
-  весь экран; батарея и блокировка экрана — через `powerMonitor`.
+Or from a terminal:
 
-## Архитектура
-
-```
-                 ┌─────────────────────── main process ───────────────────────┐
-                 │                                                             │
- renderer        │   main.js — composition root: собирает модули, события app │
- (панель) ◄──────┼──► ipc.js ──► app-lifecycle.js ──► window-manager.js       │
- preload.js      │      │              │  паузы, setup     │  окна, broadcast │
-                 │      │              │                    │                  │
-                 │      ▼              ▼                    ▼                  │
-                 │   downloader.js  fullscreen-monitor  wallpaper[-mac].js    │
-                 │   (yt-dlp, очередь)  (детект игр)     (встраивание в стол) │
-                 │      │                                                      │
- wallpaper-      │      ▼              playlist.js ◄── runtime-state.js       │
- window ◄────────┼──  store.json      (что играет)     (общие флаги)          │
- (видео,         │   (настройки,                                              │
-  кроссфейд)     │    клипы)                                                  │
-                 └─────────────────────────────────────────────────────────────┘
+```bash
+pnpm dist         # Windows .exe
+pnpm dist:mac     # macOS .dmg
+pnpm dist:linux   # Linux .AppImage
 ```
 
-Правило зависимостей: модули нижнего уровня (store, playlist, runtime-state)
-ничего не знают об окнах и IPC. `main.js` — тонкая точка входа, передающая
-колбэки при инициализации; вся логика — в модулях с единственной зоной
-ответственности.
+The installer is self-contained — the target machine needs neither Node.js nor
+Python. If you run `pnpm setup` before building, the binaries get packed inside
+the installer and the first launch is instant; otherwise the app fetches them
+itself.
 
-### Почему Electron
+Releases are built automatically: pushing a `v*` tag triggers GitHub Actions
+(`.github/workflows/release.yml`), which builds the Windows (.exe), macOS (.dmg)
+and Linux (.AppImage) packages and attaches them to the release.
 
-Задача — рендерить видеокодеки (VP9/AV1/H.264) с аппаратным ускорением,
-HTML-слоем кроссфейда и одинаково на трёх ОС. Chromium делает это из коробки:
-`<video>` + два слоя с opacity-переходом — и не нужен свой видеоплеер на
-нативном стеке под каждую платформу. Цена — размер дистрибутива, но для
-десктопного приложения с видео это оправданный размен.
+## How it works
 
-### Почему WorkerW (Windows)
+- **Downloading** — [yt-dlp](https://github.com/yt-dlp/yt-dlp) with
+  `--download-sections` cuts the requested segment during the download itself
+  (precise cutting via ffmpeg).
+- **Wallpaper (Windows)** — the `WorkerW` trick: the app sends `Progman` the
+  `0x052C` message, Windows creates a layer behind the desktop icons, and the
+  Electron window with `<video>` is embedded into it via `SetParent`
+  (koffi → `user32.dll`). One window per monitor with virtual-screen
+  coordinate mapping.
+- **Wallpaper (macOS)** — the NSWindow level is lowered to
+  `kCGDesktopWindowLevel` (koffi → objc-runtime) — below the icon layer,
+  video behind the shortcuts.
+- **Wallpaper (Linux)** — the window is created with the `desktop` type (X11)
+  and lives at the desktop background level.
+- **Crossfade** — two `<video>` layers: the next clip loads in a hidden layer
+  and fades in over the old one.
+- **Game pause** — every 2 seconds the app checks whether the active window
+  covers the whole screen; battery and screen lock via `powerMonitor`.
 
-Windows не даёт официального API «нарисуй своё окно за иконками рабочего
-стола». Единственный документированный сообществом способ — недокументированное
-сообщение `0x052C` окну `Progman`: по нему Windows создаёт окно `WorkerW`
-позади слоя иконок (изначально — для анимации смены обоев). Наше окно
-становится его ребёнком через `SetParent` и оказывается ровно между стеной
-и иконками. Так работают Wallpaper Engine и Lively Wallpaper.
+## Architecture
 
-Нюанс, который ломает половину подобных проектов: в Windows 11 24H2 слой
-иконок (`SHELLDLL_DefView`) переехал внутрь самого `Progman`, и старый
-алгоритм ставит окно ПОВЕРХ иконок. Поэтому `wallpaper.js` сначала определяет
-раскладку: если DefView внутри Progman — окно вставляется в z-порядок сразу
-ПОД него через `SetWindowPos`; иначе используется классический путь через
-WorkerW-соседа. FFI-вызовы (`user32.dll`) делаются через koffi — без
-нативной компиляции при установке.
+```mermaid
+graph TB
+    subgraph renderer["Control panel (renderer)"]
+        UI["app.js — UI, themes, i18n"]
+    end
+    subgraph wallwin["Wallpaper window"]
+        VID["two video layers + crossfade"]
+    end
+    subgraph mainproc["Main process"]
+        MAIN["main.js — composition root"]
+        IPC["ipc.js — IPC handlers"]
+        LIFE["app-lifecycle.js — start/stop, pauses"]
+        WM["window-manager.js — windows, broadcast"]
+        DL["downloader.js — yt-dlp, queue"]
+        FSM["fullscreen-monitor.js — game detection"]
+        WP["wallpaper.js / wallpaper-mac.js"]
+        PL["playlist.js — clip rotation"]
+        RS["runtime-state.js — shared flags"]
+        ST["store.js — settings, clips"]
+    end
+    UI -- preload.js --> IPC
+    IPC --> LIFE --> WM
+    WM -- preload-wallpaper.js --> VID
+    MAIN --> IPC
+    LIFE --> FSM
+    IPC --> DL
+    WM --> WP
+    LIFE --> PL --> RS
+    PL --> ST
+    DL --> ST
+```
 
-На macOS то же самое достигается штатно: уровень NSWindow опускается до
-`kCGDesktopWindowLevel` через objc-runtime. На Linux (X11) достаточно окна
-с типом `desktop` — WM сам держит его на уровне фона.
+Dependency rule: lower-level modules (store, playlist, runtime-state) know
+nothing about windows or IPC. `main.js` is a thin entry point that passes
+callbacks at init time; all logic lives in single-responsibility modules.
 
-## Структура проекта
+### Why Electron
+
+The task is to render video codecs (VP9/AV1/H.264) with hardware acceleration,
+an HTML crossfade layer, and identically across three OSes. Chromium does this
+out of the box: `<video>` plus two layers with an opacity transition — no need
+to build a native video player per platform. The cost is distribution size,
+but for a desktop video app it's a fair trade.
+
+### Why WorkerW (Windows)
+
+Windows has no official API for "draw my window behind the desktop icons".
+The only community-documented way is the undocumented `0x052C` message to
+`Progman`: it makes Windows create a `WorkerW` window behind the icon layer
+(originally for the wallpaper-change animation). Our window becomes its child
+via `SetParent` and lands exactly between the wall and the icons. This is how
+Wallpaper Engine and Lively Wallpaper work.
+
+The nuance that breaks half of similar projects: in Windows 11 24H2 the icon
+layer (`SHELLDLL_DefView`) moved inside `Progman` itself, and the old
+algorithm puts the window ON TOP of the icons. So `wallpaper.js` detects the
+layout first: if DefView is inside Progman, the window is inserted into the
+z-order right BELOW it via `SetWindowPos`; otherwise the classic
+WorkerW-sibling path is used. FFI calls (`user32.dll`) go through koffi — no
+native compilation at install time.
+
+On macOS the same is achieved through supported APIs: the NSWindow level is
+lowered to `kCGDesktopWindowLevel` via objc-runtime. On Linux (X11) a window
+of type `desktop` is enough — the WM keeps it at the background level.
+
+## Project structure
 
 ```
 src/
   main/
-    main.js               точка входа: собирает модули, события app
-    window-manager.js     окна (панель + обои), состояние для renderer
-    ipc.js                IPC-обработчики, загрузка клипов, undo-удаление
-    app-lifecycle.js      старт/стоп обоев, паузы, первичная установка
-    runtime-state.js      общие рантайм-флаги (паузы, setup, quitting)
-    playlist.js           логика плейлиста: режимы цикла, таймер, следующий клип
-    tray.js               иконка и меню в трее
-    wallpaper.js          WorkerW-трюк для Windows (koffi + user32.dll)
-    wallpaper-mac.js      уровень окна рабочего стола macOS (koffi + objc)
-    downloader.js         yt-dlp: очередь загрузок, миниатюры, ошибки
-    bin-manager.js        поиск и автодокачка yt-dlp/ffmpeg, обновление
-    fullscreen-monitor.js детект полноэкранных/развёрнутых приложений
-    store.js              JSON-хранилище настроек и клипов
-  preload.js              мост для панели управления
-  preload-wallpaper.js    минимальный мост для окна-обоев
-  renderer/               панель управления (UI, темы, i18n на 10 языков)
-  wallpaper-window/       окно-обои с кроссфейдом
-tests/                    unit-тесты: downloader, store, playlist (node --test)
-scripts/setup-bins.mjs    предзагрузка yt-dlp и ffmpeg (опционально)
-.github/workflows/        CI (линт + тесты) и автосборка релизов
+    main.js               entry point: wires modules, app events
+    window-manager.js     windows (panel + wallpaper), renderer state
+    ipc.js                IPC handlers, clip downloads, undo-removal
+    app-lifecycle.js      wallpaper start/stop, pauses, first-run setup
+    runtime-state.js      shared runtime flags (pauses, setup, quitting)
+    playlist.js           playlist logic: loop modes, timer, next clip
+    tray.js               tray icon and menu
+    wallpaper.js          WorkerW trick for Windows (koffi + user32.dll)
+    wallpaper-mac.js      macOS desktop window level (koffi + objc)
+    downloader.js         yt-dlp: download queue, thumbnails, errors
+    bin-manager.js        yt-dlp/ffmpeg discovery, auto-fetch, updates
+    fullscreen-monitor.js fullscreen/maximized app detection
+    store.js              JSON store for settings and clips
+  preload.js              bridge for the control panel
+  preload-wallpaper.js    minimal bridge for the wallpaper window
+  renderer/               control panel (UI, themes, i18n for 10 languages)
+  wallpaper-window/       wallpaper window with crossfade
+tests/                    unit tests: downloader, store, playlist (node --test)
+scripts/setup-bins.mjs    pre-download yt-dlp and ffmpeg (optional)
+.github/workflows/        CI (lint + tests) and automated release builds
 ```
 
-## Разработка
+## Development
 
 ```bash
-pnpm test     # unit-тесты (node:test, без зависимостей)
+pnpm test     # unit tests (node:test, no dependencies)
 pnpm lint     # ESLint
 pnpm format   # Prettier
 ```
 
+The panel UI can be previewed in a regular browser — open
+`src/renderer/index.html`: `dev-mock.js` provides test data.
+
+## Roadmap
+
+- [ ] Scheduler: different wallpapers for morning and evening
+- [ ] Hotkeys (next clip, pause, sound)
+- [ ] Presets — a "shelf" of popular loops
+- [ ] Wayland support
+- [ ] Code-signed installer
+
+Want something from the list sooner — vote in
+[Discussions](https://github.com/HumSaw/yt-live-wallpaper/discussions)
+or send a PR.
+
 ## FAQ
 
-**Видео перестали скачиваться.**
-YouTube периодически меняет сайт. Нажмите «Обновить yt-dlp» в настройках — обычно чинит.
+**Videos stopped downloading.**
+YouTube changes its site periodically. Click "Update yt-dlp" in settings —
+that usually fixes it.
 
-**Обои тормозят в играх.**
-Включите «Паузу при играх» в настройках (включена по умолчанию) — видео
-останавливается, когда что-то открыто на весь экран.
+**Wallpaper lags in games.**
+Enable "Pause during games" in settings (on by default) — the video stops
+whenever something is fullscreen.
 
-**Куда скачиваются видео?**
-`%APPDATA%/yt-live-wallpaper/videos`. Локальные файлы не копируются — плейлист
-ссылается на оригинал, и при удалении клипа ваш файл остаётся на месте.
+**Where are videos stored?**
+`%APPDATA%/yt-live-wallpaper/videos` (Windows),
+`~/Library/Application Support/yt-live-wallpaper/videos` (macOS),
+`~/.config/yt-live-wallpaper/videos` (Linux). Local files are not copied —
+the playlist references the original, and removing a clip keeps your file
+in place.
 
-**Работает на macOS/Linux?**
-Да. На macOS окно-обои опускается на уровень фона рабочего стола
-(ниже иконок) через objc-runtime; на Linux используется окно типа `desktop`
-(X11 — полная поддержка; на Wayland поведение зависит от композитора).
+**Does it work on macOS/Linux?**
+Yes. On macOS the wallpaper window is lowered to the desktop background level
+(below the icons) via objc-runtime; on Linux a `desktop`-type window is used
+(X11 — full support; on Wayland behavior depends on the compositor).
 
-## Вклад
+## Contributing
 
-PR и issue приветствуются — см. [CONTRIBUTING.md](CONTRIBUTING.md).
+PRs and issues are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Лицензия
+## License
 
-[MIT](LICENSE). Скачивая видео с YouTube, вы соглашаетесь с условиями YouTube ToS —
-используйте загрузку только для личных целей.
+[MIT](LICENSE). By downloading videos from YouTube you agree to the YouTube
+ToS — use downloads for personal purposes only.

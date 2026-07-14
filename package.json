@@ -1,17 +1,18 @@
 {
   "name": "yt-live-wallpaper",
   "version": "0.3.0",
-  "description": "Живые 4K-обои из YouTube-видео и локальных файлов — Windows, macOS, Linux",
+  "description": "Turn any YouTube video into a live 4K desktop wallpaper — Windows, macOS, Linux",
   "private": true,
   "main": "src/main/main.js",
   "license": "MIT",
   "author": "yt-live-wallpaper contributors",
+  "homepage": "https://github.com/HumSaw/yt-live-wallpaper",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HumSaw/animated-desktop-wallpaper.git"
+    "url": "https://github.com/HumSaw/yt-live-wallpaper.git"
   },
   "bugs": {
-    "url": "https://github.com/HumSaw/animated-desktop-wallpaper/issues"
+    "url": "https://github.com/HumSaw/yt-live-wallpaper/issues"
   },
   "keywords": [
     "electron",

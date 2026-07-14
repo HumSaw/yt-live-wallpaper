@@ -1,33 +1,64 @@
-# Как внести вклад
+# Contributing
 
-Спасибо за интерес к проекту!
+Thanks for your interest in the project! / Спасибо за интерес к проекту!
 
-## Запуск для разработки
+## Dev setup
+
+Requirements: [Node.js](https://nodejs.org) 20+ and pnpm (`corepack enable` or `npm i -g pnpm`).
 
 ```bash
+git clone https://github.com/HumSaw/yt-live-wallpaper.git
+cd yt-live-wallpaper
 pnpm install
-pnpm setup     # yt-dlp + ffmpeg в bin/
-pnpm start
+pnpm setup     # optional: pre-download yt-dlp + ffmpeg into bin/
+pnpm start     # launch the app (binaries auto-fetch on first start if you skipped setup)
 ```
 
-UI панели можно смотреть и в обычном браузере — откройте
-`src/renderer/index.html`: файл `dev-mock.js` подставит тестовые данные
-(в Electron он неактивен и в сборку не попадает).
+On Windows you can skip the terminal entirely: double-click `run-dev.bat`.
 
-## Перед PR
+### Working on the panel UI without Electron
 
-- Проверьте, что `node --check` проходит для изменённых JS-файлов
-- Опишите в PR, что и зачем изменено; для UI-изменений приложите скриншот
-- Один PR — одно логическое изменение
+Open `src/renderer/index.html` in a regular browser — `dev-mock.js` injects
+test data (clips, settings, download progress). In Electron the mock is
+inactive and it is excluded from builds. This is the fastest loop for
+styling and layout work.
 
-## Багрепорты
+### Testing wallpaper embedding
 
-В issue укажите: версию Windows, версию приложения, шаги воспроизведения
-и текст ошибки из панели (если есть).
+The desktop embedding (`wallpaper.js` / `wallpaper-mac.js`) can only be tested
+on a real OS — there is no emulation. If you change it, state in the PR which
+OS and version you verified on (for Windows include the build, e.g. 24H2 —
+the desktop layout differs between builds and it matters).
 
-## Идеи, которые ждут реализации
+## Checks before a PR
 
-- Пресеты «полка» популярных лупов
-- Горячие клавиши
-- Планировщик: разные обои утром и вечером
-- Подписанный сертификатом установщик
+```bash
+pnpm lint      # ESLint — must pass with no errors
+pnpm test      # unit tests (node --test) — all green
+pnpm format    # Prettier — auto-format
+```
+
+CI runs lint + tests on every push; a red build won't be merged.
+
+## PR guidelines
+
+- One PR — one logical change
+- Describe what changed and why; attach a screenshot for UI changes
+- New logic in `store`, `playlist`, `downloader` should come with tests —
+  these modules are dependency-injected and test without Electron
+- UI strings go through i18n (`src/renderer/i18n.js`) — add a key to all
+  10 locales (English fallback is fine for languages you don't speak)
+
+## Bug reports
+
+Please include in the issue:
+
+- OS and version (for Windows — the build, e.g. 23H2/24H2; find it via `winver`)
+- App version (Settings → bottom of the panel)
+- Steps to reproduce
+- Error text from the panel, if any
+
+## Ideas waiting for a hand
+
+See the [Roadmap](README.md#roadmap) — or propose your own in
+[Discussions](https://github.com/HumSaw/yt-live-wallpaper/discussions).
