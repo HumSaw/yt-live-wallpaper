@@ -11,7 +11,24 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-ff4d8d)
 
+<br />
+
+<img src="docs/screenshot-night.png" alt="Панель управления — неоновая ночная тема" width="720" />
+
+<sub>Неоновая ночь и тёплый день — темы переключаются одной кнопкой. Интерфейс на 10 языках.</sub>
+
+<img src="docs/screenshot-day.png" alt="Панель управления — дневная тема" width="720" />
+
 </div>
+
+---
+
+**English TL;DR:** Turn any YouTube video into a live 4K wallpaper on Windows.
+Paste a link — the app downloads it (whole or a timestamped section) and plays it
+behind your desktop icons via the WorkerW trick. Playlists, crossfade, multi-monitor,
+auto-pause in games and on battery, 10 UI languages. One-click installer in
+[Releases](../../releases/latest); binaries (yt-dlp/ffmpeg) are fetched automatically
+on first run.
 
 ---
 
@@ -83,16 +100,29 @@ pnpm dist       # готовый .exe появится в dist/
 ```
 src/
   main/
-    main.js               главный процесс: окна, трей, IPC, плейлист, мониторы
+    main.js               главный процесс: окна, IPC, мониторы
+    playlist.js           логика плейлиста: режимы цикла, таймер, следующий клип
+    tray.js               иконка и меню в трее
     wallpaper.js          WorkerW-трюк (koffi + user32.dll)
-    downloader.js         yt-dlp: загрузка, миниатюры, обновление, ошибки
+    downloader.js         yt-dlp: очередь загрузок, миниатюры, ошибки
+    bin-manager.js        поиск и автодокачка yt-dlp/ffmpeg, обновление
     fullscreen-monitor.js детект полноэкранных/развёрнутых приложений
     store.js              JSON-хранилище настроек и клипов
-  preload.js              мост между процессами
-  renderer/               панель управления (UI, темы, анимация шапки)
+  preload.js              мост для панели управления
+  preload-wallpaper.js    минимальный мост для окна-обоев
+  renderer/               панель управления (UI, темы, i18n на 10 языков)
   wallpaper-window/       окно-обои с кроссфейдом
-scripts/setup-bins.mjs    загрузка yt-dlp и ffmpeg
-.github/workflows/        автосборка релизов
+tests/                    unit-тесты (node --test)
+scripts/setup-bins.mjs    предзагрузка yt-dlp и ffmpeg (опционально)
+.github/workflows/        CI (линт + тесты) и автосборка релизов
+```
+
+## Разработка
+
+```bash
+pnpm test     # unit-тесты (node:test, без зависимостей)
+pnpm lint     # ESLint
+pnpm format   # Prettier
 ```
 
 ## FAQ

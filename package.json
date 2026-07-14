@@ -5,11 +5,29 @@
   "private": true,
   "main": "src/main/main.js",
   "license": "MIT",
-  "author": "YT Live Wallpaper",
-  "keywords": ["electron", "wallpaper", "live-wallpaper", "youtube", "yt-dlp", "windows", "workerw"],
+  "author": "yt-live-wallpaper contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OWNER/yt-live-wallpaper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/yt-live-wallpaper/issues"
+  },
+  "keywords": [
+    "electron",
+    "wallpaper",
+    "live-wallpaper",
+    "youtube",
+    "yt-dlp",
+    "windows",
+    "workerw"
+  ],
   "scripts": {
     "start": "electron .",
     "setup": "node scripts/setup-bins.mjs",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{js,css,html}\" \"tests/**/*.js\" \"scripts/**/*.mjs\"",
     "dist": "electron-builder --win"
   },
   "dependencies": {
@@ -17,7 +35,9 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5"
   },
   "build": {
     "appId": "app.ytlivewallpaper",
@@ -27,21 +47,24 @@
     },
     "files": [
       "src/**/*",
-      "assets/**/*",
-      "!src/renderer/dev-mock.js"
+      "assets/**/*"
     ],
     "extraResources": [
       {
         "from": "bin",
         "to": "bin",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.png",
