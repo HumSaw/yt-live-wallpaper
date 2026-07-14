@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   playClip: (id) => ipcRenderer.invoke('clip:play', id),
   startWallpaper: () => ipcRenderer.invoke('wallpaper:start'),
   stopWallpaper: () => ipcRenderer.invoke('wallpaper:stop'),
+  nextClip: () => ipcRenderer.invoke('wallpaper:next'),
   setSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
   onStateUpdate: (cb) => {
     const listener = (_e, state) => cb(state)
@@ -22,4 +23,5 @@ contextBridge.exposeInMainWorld('wallpaperApi', {
   onPause: (cb) => ipcRenderer.on('wallpaper:pause', () => cb()),
   onResume: (cb) => ipcRenderer.on('wallpaper:resume', () => cb()),
   onVolume: (cb) => ipcRenderer.on('wallpaper:volume', (_e, v) => cb(v)),
+  notifyEnded: () => ipcRenderer.send('wallpaper:ended'),
 })

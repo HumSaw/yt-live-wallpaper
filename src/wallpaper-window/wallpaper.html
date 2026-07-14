@@ -22,15 +22,22 @@
   </style>
 </head>
 <body>
-  <video id="video" autoplay loop playsinline></video>
+  <video id="video" autoplay playsinline></video>
   <script>
     const video = document.getElementById('video')
 
-    window.wallpaperApi.onPlay(({ filePath, volume }) => {
+    window.wallpaperApi.onPlay(({ filePath, volume, loop }) => {
+      video.loop = !!loop
       video.src = 'file:///' + filePath.replace(/\\/g, '/')
       video.volume = Math.max(0, Math.min(1, volume))
       video.muted = volume === 0
       video.play().catch(() => {})
+    })
+
+    // В режиме «последовательность» (loop=false) сообщаем главному процессу,
+    // что видео доиграло — он включит следующий клип в цикле
+    video.addEventListener('ended', () => {
+      window.wallpaperApi.notifyEnded()
     })
 
     window.wallpaperApi.onPause(() => video.pause())

@@ -8,92 +8,175 @@
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true"></div>
-        <div>
+    <!-- Шапка с аниме-артом -->
+    <header class="hero">
+      <img class="hero-art" src="../../assets/header-art.png" alt="" aria-hidden="true" />
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <div class="brand">
+          <span class="brand-kana" aria-hidden="true">ライブ壁紙</span>
           <h1>YT Live Wallpaper</h1>
-          <p class="subtitle">Живые 4K-обои из отрезков YouTube</p>
+          <p class="subtitle">Любое видео с YouTube — живые 4K-обои твоего рабочего стола</p>
         </div>
-      </div>
-      <div class="header-actions">
-        <span id="status-badge" class="badge badge-off">Обои выключены</span>
-        <button id="btn-toggle-wallpaper" class="btn btn-primary">Запустить обои</button>
+        <div class="hero-actions">
+          <span id="status-badge" class="badge badge-off">
+            <span class="badge-dot" aria-hidden="true"></span>
+            <span id="status-text">Обои выключены</span>
+          </span>
+          <button id="btn-toggle-wallpaper" class="btn btn-primary btn-lg">Запустить обои</button>
+        </div>
       </div>
     </header>
 
-    <div id="platform-warning" class="warning hidden">
+    <div id="platform-warning" class="warning hidden" role="alert">
       Вы запустили приложение не на Windows — панель работает, но обои на рабочий стол
       ставятся только в Windows.
     </div>
 
     <main class="main">
-      <section class="card">
-        <h2>Добавить отрезок</h2>
+      <!-- ШАГ 1: добавить видео -->
+      <section class="card" aria-labelledby="step1-title">
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">01</span>
+          <div>
+            <h2 id="step1-title">Добавь видео</h2>
+            <p class="card-sub">Вставь ссылку — приложение само скачает видео в максимальном качестве до 4K</p>
+          </div>
+          <span class="card-kana" aria-hidden="true">追加</span>
+        </div>
+
         <form id="add-form" class="add-form">
           <div class="field field-url">
             <label for="url">Ссылка на YouTube</label>
             <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required />
           </div>
-          <div class="field">
-            <label for="start">Начало</label>
-            <input id="start" type="text" placeholder="1:20" />
+
+          <fieldset class="segment" aria-label="Что скачать">
+            <legend class="sr-only">Что скачать</legend>
+            <label class="segment-option">
+              <input type="radio" name="range-mode" value="full" checked />
+              <span>Всё видео целиком</span>
+            </label>
+            <label class="segment-option">
+              <input type="radio" name="range-mode" value="clip" />
+              <span>Только отрезок</span>
+            </label>
+          </fieldset>
+
+          <div id="timecodes" class="timecodes hidden">
+            <div class="field">
+              <label for="start">Начало</label>
+              <input id="start" type="text" placeholder="1:20" inputmode="numeric" />
+            </div>
+            <span class="timecode-dash" aria-hidden="true">–</span>
+            <div class="field">
+              <label for="end">Конец</label>
+              <input id="end" type="text" placeholder="1:50" inputmode="numeric" />
+            </div>
+            <p class="hint timecode-hint">Формат «мм:сс» или «чч:мм:сс». Пустое поле = от начала / до конца.</p>
           </div>
-          <div class="field">
-            <label for="end">Конец</label>
-            <input id="end" type="text" placeholder="1:50" />
-          </div>
-          <button type="submit" class="btn btn-primary btn-add">Скачать</button>
+
+          <p id="form-error" class="form-error hidden" role="alert"></p>
+
+          <button type="submit" class="btn btn-primary btn-add">Скачать и добавить</button>
         </form>
-        <p class="hint">Таймкоды в формате «мм:сс» или «чч:мм:сс». Оставьте пустыми, чтобы скачать всё видео. Качество — максимум до 4K.</p>
       </section>
 
-      <section class="card">
-        <h2>Плейлист</h2>
+      <!-- ШАГ 2: плейлист -->
+      <section class="card" aria-labelledby="step2-title">
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">02</span>
+          <div>
+            <h2 id="step2-title">Плейлист</h2>
+            <p class="card-sub">Все скачанные видео крутятся циклично — по одному или друг за другом</p>
+          </div>
+          <span class="card-kana" aria-hidden="true">再生</span>
+        </div>
         <ul id="clip-list" class="clip-list"></ul>
-        <p id="empty-hint" class="hint">Пока пусто — добавьте первый отрезок выше.</p>
+        <p id="empty-hint" class="empty-hint">
+          Пока пусто. Вставь ссылку выше — и через минуту у тебя будут живые обои.
+        </p>
       </section>
 
-      <section class="card">
-        <h2>Настройки</h2>
+      <!-- ШАГ 3: режим воспроизведения -->
+      <section class="card" aria-labelledby="step3-title">
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">03</span>
+          <div>
+            <h2 id="step3-title">Режим воспроизведения</h2>
+            <p class="card-sub">Как крутить видео на рабочем столе</p>
+          </div>
+          <span class="card-kana" aria-hidden="true">ループ</span>
+        </div>
+
+        <div class="mode-grid" role="radiogroup" aria-label="Режим воспроизведения">
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="single" />
+            <span class="mode-title">Один клип</span>
+            <span class="mode-desc">Выбранное видео крутится по кругу бесконечно</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="sequence" />
+            <span class="mode-title">Друг за другом</span>
+            <span class="mode-desc">Видео доигрывает до конца — включается следующее, и так по кругу</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="timer" />
+            <span class="mode-title">По таймеру</span>
+            <span class="mode-desc">Клип сменяется каждые N секунд, не дожидаясь конца</span>
+          </label>
+        </div>
+
+        <div id="interval-row" class="interval-row hidden">
+          <label for="interval">Интервал смены (сек)</label>
+          <input id="interval" type="number" min="10" step="10" class="input-number" />
+        </div>
+      </section>
+
+      <!-- Настройки -->
+      <section class="card" aria-labelledby="settings-title">
+        <div class="card-head">
+          <span class="step-num step-num-dim" aria-hidden="true">⚙</span>
+          <div>
+            <h2 id="settings-title">Настройки</h2>
+            <p class="card-sub">Звук и поведение приложения</p>
+          </div>
+          <span class="card-kana" aria-hidden="true">設定</span>
+        </div>
+
         <div class="settings-grid">
           <div class="setting">
-            <label for="volume">Громкость</label>
+            <label for="volume">Громкость обоев</label>
             <div class="volume-row">
               <input id="volume" type="range" min="0" max="100" step="1" />
               <span id="volume-label" class="volume-label">30%</span>
-              <button id="btn-mute" class="btn btn-ghost btn-small">Выкл. звук</button>
+              <button id="btn-mute" type="button" class="btn btn-ghost btn-small">Выкл. звук</button>
             </div>
           </div>
 
           <label class="setting setting-toggle">
-            <input id="playlist-mode" type="checkbox" />
-            <span>Плейлист: сменять клипы по кругу</span>
-          </label>
-
-          <div class="setting">
-            <label for="interval">Интервал смены клипа (сек)</label>
-            <input id="interval" type="number" min="10" step="10" class="input-number" />
-          </div>
-
-          <label class="setting setting-toggle">
             <input id="pause-fullscreen" type="checkbox" />
-            <span>Пауза при полноэкранных приложениях (игры, видео)</span>
+            <span>Пауза при играх и полноэкранных приложениях <em>(экономит видеокарту)</em></span>
           </label>
 
           <label class="setting setting-toggle">
             <input id="autostart" type="checkbox" />
-            <span>Автозапуск вместе с Windows</span>
+            <span>Запускать вместе с Windows</span>
           </label>
 
           <label class="setting setting-toggle">
             <input id="auto-resume" type="checkbox" />
-            <span>Автоматически включать обои при запуске приложения</span>
+            <span>Включать обои сразу при запуске приложения</span>
           </label>
         </div>
       </section>
     </main>
+
+    <footer class="footer">
+      <p>Приложение живёт в трее: закрой окно — обои продолжат работать. Выход — через меню трея.</p>
+    </footer>
   </div>
+  <script src="dev-mock.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
