@@ -101,6 +101,8 @@ body {
   gap: 20px;
 }
 
+
+
 /* --- шапка --- */
 
 .hero {
@@ -383,6 +385,35 @@ h1.glitch::after {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* Развёрнутое окно: контент растягивается, карточки встают в две колонки,
+   чтобы не было пустых боков. Порог 1200px — обычное «на весь экран». */
+@media (min-width: 1200px) {
+  .app {
+    max-width: 1560px;
+    padding: 24px 32px 56px;
+  }
+
+  .hero { min-height: 280px; }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  /* левая колонка: добавление (01) + плейлист (02); правая: режим (03) + настройки */
+  .main .card:nth-child(1) { grid-column: 1; grid-row: 1; }
+  .main .card:nth-child(2) { grid-column: 1; grid-row: 2; }
+  .main .card:nth-child(3) { grid-column: 2; grid-row: 1; }
+  .main .card:nth-child(4) { grid-column: 2; grid-row: 2; }
+}
+
+/* Совсем широкий монитор (2K/ультравайд): чуть больше воздуха в карточках */
+@media (min-width: 1800px) {
+  .app { max-width: 1720px; }
+  .card { padding: 26px 30px; }
 }
 
 .card {
