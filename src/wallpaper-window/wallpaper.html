@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Wallpaper</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover; /* заполняет экран без чёрных полос */
+    }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay loop playsinline></video>
+  <script>
+    const video = document.getElementById('video')
+
+    window.wallpaperApi.onPlay(({ filePath, volume }) => {
+      video.src = 'file:///' + filePath.replace(/\\/g, '/')
+      video.volume = Math.max(0, Math.min(1, volume))
+      video.muted = volume === 0
+      video.play().catch(() => {})
+    })
+
+    window.wallpaperApi.onPause(() => video.pause())
+    window.wallpaperApi.onResume(() => video.play().catch(() => {}))
+    window.wallpaperApi.onVolume((v) => {
+      video.volume = Math.max(0, Math.min(1, v))
+      video.muted = v === 0
+    })
+  </script>
+</body>
+</html>

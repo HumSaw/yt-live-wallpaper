@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru" class="bg">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Live Wallpaper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <h1>YT Live Wallpaper</h1>
+          <p class="subtitle">Живые 4K-обои из отрезков YouTube</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span id="status-badge" class="badge badge-off">Обои выключены</span>
+        <button id="btn-toggle-wallpaper" class="btn btn-primary">Запустить обои</button>
+      </div>
+    </header>
+
+    <div id="platform-warning" class="warning hidden">
+      Вы запустили приложение не на Windows — панель работает, но обои на рабочий стол
+      ставятся только в Windows.
+    </div>
+
+    <main class="main">
+      <section class="card">
+        <h2>Добавить отрезок</h2>
+        <form id="add-form" class="add-form">
+          <div class="field field-url">
+            <label for="url">Ссылка на YouTube</label>
+            <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required />
+          </div>
+          <div class="field">
+            <label for="start">Начало</label>
+            <input id="start" type="text" placeholder="1:20" />
+          </div>
+          <div class="field">
+            <label for="end">Конец</label>
+            <input id="end" type="text" placeholder="1:50" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-add">Скачать</button>
+        </form>
+        <p class="hint">Таймкоды в формате «мм:сс» или «чч:мм:сс». Оставьте пустыми, чтобы скачать всё видео. Качество — максимум до 4K.</p>
+      </section>
+
+      <section class="card">
+        <h2>Плейлист</h2>
+        <ul id="clip-list" class="clip-list"></ul>
+        <p id="empty-hint" class="hint">Пока пусто — добавьте первый отрезок выше.</p>
+      </section>
+
+      <section class="card">
+        <h2>Настройки</h2>
+        <div class="settings-grid">
+          <div class="setting">
+            <label for="volume">Громкость</label>
+            <div class="volume-row">
+              <input id="volume" type="range" min="0" max="100" step="1" />
+              <span id="volume-label" class="volume-label">30%</span>
+              <button id="btn-mute" class="btn btn-ghost btn-small">Выкл. звук</button>
+            </div>
+          </div>
+
+          <label class="setting setting-toggle">
+            <input id="playlist-mode" type="checkbox" />
+            <span>Плейлист: сменять клипы по кругу</span>
+          </label>
+
+          <div class="setting">
+            <label for="interval">Интервал смены клипа (сек)</label>
+            <input id="interval" type="number" min="10" step="10" class="input-number" />
+          </div>
+
+          <label class="setting setting-toggle">
+            <input id="pause-fullscreen" type="checkbox" />
+            <span>Пауза при полноэкранных приложениях (игры, видео)</span>
+          </label>
+
+          <label class="setting setting-toggle">
+            <input id="autostart" type="checkbox" />
+            <span>Автозапуск вместе с Windows</span>
+          </label>
+
+          <label class="setting setting-toggle">
+            <input id="auto-resume" type="checkbox" />
+            <span>Автоматически включать обои при запуске приложения</span>
+          </label>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
