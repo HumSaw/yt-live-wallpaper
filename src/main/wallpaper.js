@@ -52,6 +52,15 @@ function loadUser32() {
     'bool',
   ])
   const IsZoomed = user32.func('__stdcall', 'IsZoomed', 'bool', ['intptr'])
+  const SetWindowPos = user32.func('__stdcall', 'SetWindowPos', 'bool', [
+    'intptr',
+    'intptr',
+    'int',
+    'int',
+    'int',
+    'int',
+    'uint',
+  ])
 
   fns = {
     koffi,
@@ -67,6 +76,7 @@ function loadUser32() {
     GetSystemMetrics,
     MoveWindow,
     IsZoomed,
+    SetWindowPos,
   }
   return fns
 }
@@ -100,7 +110,8 @@ function attachToDesktop(browserWindow, physicalBounds) {
     const result = [0]
     f.SendMessageTimeoutW(progman, 0x052c, 0, 0, 0x0000, 1000, result)
 
-    // Ищем WorkerW, который является соседом окна с SHELLDLL_DefView
+    // Классическая схема (до Win11 24H2): SHELLDLL_DefView живёт в отдельном
+    // WorkerW верхнего уровня, а нужный нам WorkerW — его сосед по z-порядку.
     let workerw = 0
     const cb = f.koffi.register((topHwnd) => {
       const shellView = f.FindWindowExW(topHwnd, 0, 'SHELLDLL_DefView', null)
@@ -114,10 +125,31 @@ function attachToDesktop(browserWindow, physicalBounds) {
     f.EnumWindows(cb, 0)
     f.koffi.unregister(cb)
 
-    // На Windows 11 24H2 иногда SHELLDLL_DefView находится прямо в Progman,
-    // тогда родителем можно сделать сам Progman
-    const target = workerw || progman
-    f.SetParent(hwnd, target)
+    if (workerw) {
+      // Старая схема: WorkerW уже лежит позади иконок, просто входим в него
+      f.SetParent(hwnd, workerw)
+    } else {
+      // Windows 11 24H2+: SHELLDLL_DefView находится прямо внутри Progman,
+      // и после 0x052C WorkerW создаётся тоже КАК РЕБЁНОК Progman.
+      const workerwInProgman = f.FindWindowExW(progman, 0, 'WorkerW', null)
+      if (workerwInProgman) {
+        f.SetParent(hwnd, workerwInProgman)
+      } else {
+        // Совсем крайний случай: WorkerW нет вообще. Становимся ребёнком
+        // Progman, но новое дочернее окно встаёт НАВЕРХ z-порядка — поверх
+        // иконок. Явно опускаем себя ПОД слой иконок (SHELLDLL_DefView).
+        f.SetParent(hwnd, progman)
+        const defView = f.FindWindowExW(progman, 0, 'SHELLDLL_DefView', null)
+        // SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE = 0x0002 | 0x0001 | 0x0010
+        if (defView) {
+          // Встаём в z-порядке сразу ПОСЛЕ (то есть ПОД) слоем иконок
+          f.SetWindowPos(hwnd, defView, 0, 0, 0, 0, 0x0013)
+        } else {
+          // HWND_BOTTOM = 1 — в самый низ
+          f.SetWindowPos(hwnd, 1, 0, 0, 0, 0, 0x0013)
+        }
+      }
+    }
 
     if (physicalBounds) {
       // SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77 — начало виртуального экрана
