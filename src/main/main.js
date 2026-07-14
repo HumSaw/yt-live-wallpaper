@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron')
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, powerMonitor } = require('electron')
 const path = require('path')
 const store = require('./store')
 const downloader = require('./downloader')
@@ -8,11 +8,13 @@ const fullscreenMonitor = require('./fullscreen-monitor')
 const IS_WINDOWS = process.platform === 'win32'
 
 let controlWindow = null
-let wallpaperWindow = null
+/** Окна-обои по id дисплея: Map<displayId, BrowserWindow> */
+const wallpaperWindows = new Map()
 let tray = null
 let playlistTimer = null
 let currentClipId = null
-let pausedByFullscreen = false
+let pausedByMonitor = false // пауза из-за полного экрана / перекрытого стола
+let pausedByBattery = false
 
 // ---------- Хелперы плейлиста ----------
 function readyClips() {
@@ -22,6 +24,16 @@ function readyClips() {
 function currentIndex(clips) {
   const idx = clips.findIndex((c) => c.id === currentClipId)
   return idx >= 0 ? idx : 0
+}
+
+function wallpaperActive() {
+  return wallpaperWindows.size > 0
+}
+
+function eachWallpaperWindow(fn) {
+  for (const win of wallpaperWindows.values()) {
+    if (!win.isDestroyed()) fn(win)
+  }
 }
 
 // ---------- Окно управления ----------
@@ -58,18 +70,35 @@ function createControlWindow() {
   })
 }
 
-// ---------- Окно-обои ----------
-function createWallpaperWindow() {
-  if (wallpaperWindow) return wallpaperWindow
+// ---------- Дисплеи ----------
+function targetDisplays() {
+  const setting = store.get().settings.targetDisplay
+  const all = screen.getAllDisplays()
+  if (setting === 'all') return all
+  if (setting === 'primary') return [screen.getPrimaryDisplay()]
+  const found = all.find((d) => String(d.id) === String(setting))
+  return [found || screen.getPrimaryDisplay()]
+}
 
-  const primary = screen.getPrimaryDisplay()
-  const { width, height } = primary.size
+function displaysForRenderer() {
+  const primaryId = screen.getPrimaryDisplay().id
+  return screen.getAllDisplays().map((d, i) => ({
+    id: String(d.id),
+    label: `Монитор ${i + 1} (${d.size.width}×${d.size.height})${d.id === primaryId ? ' — основной' : ''}`,
+    primary: d.id === primaryId,
+  }))
+}
 
-  wallpaperWindow = new BrowserWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
+// ---------- Окна-обои ----------
+function createWallpaperWindowForDisplay(display) {
+  const existing = wallpaperWindows.get(display.id)
+  if (existing && !existing.isDestroyed()) return existing
+
+  const win = new BrowserWindow({
+    width: display.bounds.width,
+    height: display.bounds.height,
+    x: display.bounds.x,
+    y: display.bounds.y,
     frame: false,
     transparent: false,
     resizable: false,
@@ -86,31 +115,44 @@ function createWallpaperWindow() {
     },
   })
 
-  wallpaperWindow.loadFile(path.join(__dirname, '..', 'wallpaper-window', 'wallpaper.html'))
+  win.loadFile(path.join(__dirname, '..', 'wallpaper-window', 'wallpaper.html'))
 
-  wallpaperWindow.once('ready-to-show', () => {
-    wallpaperWindow.show()
+  win.once('ready-to-show', () => {
+    win.show()
     if (IS_WINDOWS) {
-      // Встраиваем окно ЗА иконки рабочего стола (трюк с WorkerW)
-      const ok = wallpaper.attachToDesktop(wallpaperWindow)
+      // Физические (пиксельные) границы дисплея для позиционирования внутри WorkerW
+      const physical = screen.dipToScreenRect(null, display.bounds)
+      const ok = wallpaper.attachToDesktop(win, physical)
       if (!ok) console.error('[wallpaper] Не удалось прикрепить окно к рабочему столу')
     }
   })
 
-  wallpaperWindow.on('closed', () => {
-    wallpaperWindow = null
+  win.on('closed', () => {
+    wallpaperWindows.delete(display.id)
   })
 
-  return wallpaperWindow
+  wallpaperWindows.set(display.id, win)
+  return win
 }
 
-function destroyWallpaperWindow() {
-  stopPlaylistTimer()
-  if (wallpaperWindow) {
-    wallpaperWindow.destroy()
-    wallpaperWindow = null
+function ensureWallpaperWindows() {
+  const displays = targetDisplays()
+  const wantedIds = new Set(displays.map((d) => d.id))
+  // Убираем окна с дисплеев, которые больше не выбраны
+  for (const [id, win] of wallpaperWindows) {
+    if (!wantedIds.has(id)) {
+      win.destroy()
+      wallpaperWindows.delete(id)
+    }
   }
-  pausedByFullscreen = false
+  return displays.map((d) => createWallpaperWindowForDisplay(d))
+}
+
+function destroyWallpaperWindows() {
+  stopPlaylistTimer()
+  eachWallpaperWindow((win) => win.destroy())
+  wallpaperWindows.clear()
+  pausedByMonitor = false
   if (IS_WINDOWS) wallpaper.refreshDesktop()
 }
 
@@ -121,22 +163,24 @@ function playClipById(id) {
   const clip = clips.find((c) => c.id === id) || clips[0]
   currentClipId = clip.id
 
-  const win = createWallpaperWindow()
+  const wins = ensureWallpaperWindows()
   const settings = store.get().settings
   // В режиме «последовательность» клип не зацикливается сам — по окончании
   // окно-обои шлёт wallpaper:ended и мы включаем следующий.
   const loop = settings.playbackMode !== 'sequence' || clips.length <= 1
 
-  const send = () =>
-    win.webContents.send('wallpaper:play', {
-      filePath: clip.filePath,
-      volume: settings.muted ? 0 : settings.volume,
-      loop,
-    })
-  if (win.webContents.isLoading()) {
-    win.webContents.once('did-finish-load', send)
-  } else {
-    send()
+  for (const win of wins) {
+    const send = () =>
+      win.webContents.send('wallpaper:play', {
+        filePath: clip.filePath,
+        volume: settings.muted ? 0 : settings.volume,
+        loop,
+      })
+    if (win.webContents.isLoading()) {
+      win.webContents.once('did-finish-load', send)
+    } else {
+      send()
+    }
   }
 
   store.update((s) => {
@@ -175,14 +219,26 @@ function stopPlaylistTimer() {
   }
 }
 
+// ---------- Пауза/возобновление ----------
+function applyPauseState() {
+  const shouldPause = pausedByMonitor || pausedByBattery
+  eachWallpaperWindow((win) =>
+    win.webContents.send(shouldPause ? 'wallpaper:pause' : 'wallpaper:resume')
+  )
+  broadcastState()
+  updateTrayMenu()
+}
+
 // ---------- Состояние для UI ----------
 function getStateForRenderer() {
   const s = store.get()
   return {
     clips: s.clips,
     settings: s.settings,
-    wallpaperActive: !!wallpaperWindow,
-    pausedByFullscreen,
+    wallpaperActive: wallpaperActive(),
+    pausedByFullscreen: pausedByMonitor,
+    pausedByBattery,
+    displays: displaysForRenderer(),
     platformSupported: IS_WINDOWS,
   }
 }
@@ -191,6 +247,36 @@ function broadcastState() {
   if (controlWindow && !controlWindow.isDestroyed()) {
     controlWindow.webContents.send('state:update', getStateForRenderer())
   }
+}
+
+// ---------- Общая логика добавления клипа ----------
+function startClipDownload(clip) {
+  // Название видео подтягиваем параллельно с загрузкой
+  downloader.fetchTitle(clip.url).then((title) => {
+    if (title) {
+      store.updateClip(clip.id, { title })
+      broadcastState()
+    }
+  })
+
+  downloader
+    .downloadClip(clip, (progress) => {
+      // Прогресс — только в память и в UI, без записи на диск
+      store.updateClip(clip.id, { progress }, { persist: false })
+      broadcastState()
+    })
+    .then(async (filePath) => {
+      const thumbPath = await downloader.makeThumbnail(filePath, clip.id)
+      store.updateClip(clip.id, { status: 'ready', filePath, thumbPath, progress: 100 })
+      broadcastState()
+      // Если обои ещё не запущены — включаем сразу
+      if (!wallpaperActive()) startWallpaper()
+      else schedulePlaylistTimer()
+    })
+    .catch((err) => {
+      store.updateClip(clip.id, { status: 'error', error: String(err.message || err) })
+      broadcastState()
+    })
 }
 
 // ---------- IPC ----------
@@ -203,32 +289,35 @@ function registerIpc() {
 
     const clip = store.addClip({ url, start, end })
     broadcastState()
+    startClipDownload(clip)
+    return { clip }
+  })
 
-    // Название видео подтягиваем параллельно с загрузкой
-    downloader.fetchTitle(url).then((title) => {
-      if (title) {
-        store.updateClip(clip.id, { title })
+  // Локальный файл (drag&drop): не копируем, ссылаемся на оригинал
+  ipcMain.handle('clip:addLocal', async (_e, filePath) => {
+    const err = downloader.validateLocalFile(filePath)
+    if (err) return { error: err }
+
+    const clip = store.addClip({
+      url: filePath,
+      start: '',
+      end: '',
+      source: 'local',
+      title: path.basename(filePath),
+      filePath,
+      status: 'ready',
+    })
+    broadcastState()
+
+    downloader.makeThumbnail(filePath, clip.id).then((thumbPath) => {
+      if (thumbPath) {
+        store.updateClip(clip.id, { thumbPath })
         broadcastState()
       }
     })
 
-    downloader
-      .downloadClip(clip, (progress) => {
-        // Прогресс — только в память и в UI, без записи на диск
-        store.updateClip(clip.id, { progress }, { persist: false })
-        broadcastState()
-      })
-      .then((filePath) => {
-        store.updateClip(clip.id, { status: 'ready', filePath, progress: 100 })
-        broadcastState()
-        // Если обои ещё не запущены — включаем сразу
-        if (!wallpaperWindow) startWallpaper()
-        else schedulePlaylistTimer()
-      })
-      .catch((err) => {
-        store.updateClip(clip.id, { status: 'error', error: String(err.message || err) })
-        broadcastState()
-      })
+    if (!wallpaperActive()) startWallpaper()
+    else schedulePlaylistTimer()
     return { clip }
   })
 
@@ -237,36 +326,45 @@ function registerIpc() {
     store.removeClip(id)
     if (currentClipId === id) {
       currentClipId = null
-      if (wallpaperWindow) {
+      if (wallpaperActive()) {
         // Активный клип удалили — переключаемся на следующий или гасим обои
         if (readyClips().length > 0) startWallpaper()
-        else destroyWallpaperWindow()
+        else destroyWallpaperWindows()
       }
     }
     broadcastState()
+    updateTrayMenu()
     return true
   })
 
   ipcMain.handle('clip:play', (_e, id) => {
     playClipById(id)
+    updateTrayMenu()
     return true
   })
 
   ipcMain.handle('wallpaper:start', () => {
     const ok = startWallpaper()
     broadcastState()
+    updateTrayMenu()
     return ok
   })
 
   ipcMain.handle('wallpaper:stop', () => {
-    destroyWallpaperWindow()
+    destroyWallpaperWindows()
     broadcastState()
+    updateTrayMenu()
     return true
   })
 
   ipcMain.handle('wallpaper:next', () => {
     playNextClip()
     return true
+  })
+
+  ipcMain.handle('ytdlp:update', async () => {
+    const result = await downloader.updateYtDlp()
+    return result
   })
 
   // Видео закончилось (режим «последовательность») — включаем следующее
@@ -279,65 +377,132 @@ function registerIpc() {
     const s = store.get().settings
 
     if ('volume' in patch || 'muted' in patch) {
-      if (wallpaperWindow) {
-        wallpaperWindow.webContents.send('wallpaper:volume', s.muted ? 0 : s.volume)
-      }
+      eachWallpaperWindow((win) =>
+        win.webContents.send('wallpaper:volume', s.muted ? 0 : s.volume)
+      )
     }
     if ('autostart' in patch) {
       app.setLoginItemSettings({ openAtLogin: !!patch.autostart, args: ['--hidden'] })
     }
     if ('playbackMode' in patch || 'playlistIntervalSec' in patch) {
       // Перезапускаем текущий клип, чтобы применить loop-режим
-      if (wallpaperWindow && currentClipId) playClipById(currentClipId)
+      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
       else schedulePlaylistTimer()
     }
-    if ('pauseOnFullscreen' in patch) {
-      if (patch.pauseOnFullscreen) startFullscreenMonitor()
-      else fullscreenMonitor.stop()
+    if ('targetDisplay' in patch) {
+      // Пересоздаём окна под новый набор мониторов
+      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
+    }
+    if ('pauseOnFullscreen' in patch || 'pauseWhenCovered' in patch) {
+      syncMonitorState()
+    }
+    if ('pauseOnBattery' in patch) {
+      pausedByBattery = !!patch.pauseOnBattery && powerMonitor.isOnBatteryPower()
+      applyPauseState()
     }
     broadcastState()
+    updateTrayMenu()
     return s
   })
 }
 
-// ---------- Пауза при полноэкранных приложениях ----------
-function startFullscreenMonitor() {
-  if (!IS_WINDOWS) return
-  fullscreenMonitor.start((isFullscreen) => {
-    if (!wallpaperWindow) return
-    if (isFullscreen && !pausedByFullscreen) {
-      pausedByFullscreen = true
-      wallpaperWindow.webContents.send('wallpaper:pause')
-      broadcastState()
-    } else if (!isFullscreen && pausedByFullscreen) {
-      pausedByFullscreen = false
-      wallpaperWindow.webContents.send('wallpaper:resume')
-      broadcastState()
+// ---------- Мониторинг полного экрана / перекрытия ----------
+function syncMonitorState() {
+  const s = store.get().settings
+  if (s.pauseOnFullscreen || s.pauseWhenCovered) {
+    fullscreenMonitor.start(
+      () => ({
+        fullscreen: store.get().settings.pauseOnFullscreen,
+        covered: store.get().settings.pauseWhenCovered,
+      }),
+      (shouldPause) => {
+        if (!wallpaperActive()) return
+        if (shouldPause === pausedByMonitor) return
+        pausedByMonitor = shouldPause
+        applyPauseState()
+      }
+    )
+  } else {
+    fullscreenMonitor.stop()
+    if (pausedByMonitor) {
+      pausedByMonitor = false
+      applyPauseState()
+    }
+  }
+}
+
+// ---------- Батарея ----------
+function setupPowerMonitor() {
+  powerMonitor.on('on-battery', () => {
+    if (store.get().settings.pauseOnBattery) {
+      pausedByBattery = true
+      applyPauseState()
+    }
+  })
+  powerMonitor.on('on-ac', () => {
+    if (pausedByBattery) {
+      pausedByBattery = false
+      applyPauseState()
+    }
+  })
+  // Пауза при блокировке экрана — бесплатная экономия
+  powerMonitor.on('lock-screen', () => {
+    eachWallpaperWindow((win) => win.webContents.send('wallpaper:pause'))
+  })
+  powerMonitor.on('unlock-screen', () => {
+    if (!pausedByMonitor && !pausedByBattery) {
+      eachWallpaperWindow((win) => win.webContents.send('wallpaper:resume'))
     }
   })
 }
 
 // ---------- Трей ----------
-function createTray() {
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'tray.png'))
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }))
-  tray.setToolTip('YT Live Wallpaper')
+function updateTrayMenu() {
+  if (!tray) return
+  const active = wallpaperActive()
+  const s = store.get().settings
   const menu = Menu.buildFromTemplate([
     { label: 'Открыть панель', click: () => createControlWindow() },
-    { label: 'Следующий клип', click: () => playNextClip() },
     { type: 'separator' },
-    { label: 'Остановить обои', click: () => { destroyWallpaperWindow(); broadcastState() } },
+    active
+      ? { label: 'Остановить обои', click: () => { destroyWallpaperWindows(); broadcastState(); updateTrayMenu() } }
+      : {
+          label: 'Запустить обои',
+          enabled: readyClips().length > 0,
+          click: () => { startWallpaper(); broadcastState(); updateTrayMenu() },
+        },
+    { label: 'Следующий клип', enabled: active && readyClips().length > 1, click: () => playNextClip() },
+    {
+      label: s.muted ? 'Включить звук' : 'Выключить звук',
+      enabled: active,
+      click: () => {
+        store.update((st) => { st.settings.muted = !st.settings.muted })
+        const st = store.get().settings
+        eachWallpaperWindow((win) =>
+          win.webContents.send('wallpaper:volume', st.muted ? 0 : st.volume)
+        )
+        broadcastState()
+        updateTrayMenu()
+      },
+    },
     { type: 'separator' },
     {
       label: 'Выход',
       click: () => {
         app.isQuiting = true
-        destroyWallpaperWindow()
+        destroyWallpaperWindows()
         app.quit()
       },
     },
   ])
   tray.setContextMenu(menu)
+}
+
+function createTray() {
+  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'tray.png'))
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }))
+  tray.setToolTip('YT Live Wallpaper')
+  updateTrayMenu()
   tray.on('double-click', () => createControlWindow())
 }
 
@@ -353,18 +518,33 @@ if (!gotLock) {
     downloader.init(app.getPath('userData'))
     registerIpc()
     createTray()
+    setupPowerMonitor()
 
     const startHidden = process.argv.includes('--hidden')
     if (!startHidden) createControlWindow()
 
     const settings = store.get().settings
-    if (settings.pauseOnFullscreen) startFullscreenMonitor()
+    syncMonitorState()
+    if (settings.pauseOnBattery && powerMonitor.isOnBatteryPower()) {
+      pausedByBattery = true
+    }
 
     // Автовозобновление обоев при старте
     if (settings.autoResume && readyClips().length > 0) {
       currentClipId = settings.activeClipId
       startWallpaper()
+      if (pausedByBattery) applyPauseState()
     }
+
+    // Подключили/отключили монитор — пересобираем окна
+    screen.on('display-added', () => {
+      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
+      broadcastState()
+    })
+    screen.on('display-removed', () => {
+      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
+      broadcastState()
+    })
   })
 
   app.on('window-all-closed', () => {

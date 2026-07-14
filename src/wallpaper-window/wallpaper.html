@@ -18,33 +18,82 @@
       width: 100%;
       height: 100%;
       object-fit: cover; /* заполняет экран без чёрных полос */
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+    video.visible {
+      opacity: 1;
     }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline></video>
+  <!-- Два видео-слоя для плавного кроссфейда между клипами -->
+  <video id="video-a" autoplay playsinline></video>
+  <video id="video-b" autoplay playsinline></video>
   <script>
-    const video = document.getElementById('video')
+    const layers = [document.getElementById('video-a'), document.getElementById('video-b')]
+    let front = 0 // индекс видимого слоя
+
+    function activeVideo() {
+      return layers[front]
+    }
+
+    function clamp01(v) {
+      return Math.max(0, Math.min(1, v))
+    }
 
     window.wallpaperApi.onPlay(({ filePath, volume, loop }) => {
-      video.loop = !!loop
-      video.src = 'file:///' + filePath.replace(/\\/g, '/')
-      video.volume = Math.max(0, Math.min(1, volume))
-      video.muted = volume === 0
-      video.play().catch(() => {})
+      const src = 'file:///' + filePath.replace(/\\/g, '/')
+      const current = layers[front]
+
+      // Тот же файл — просто обновляем loop/громкость, без перезапуска
+      if (current.src && decodeURI(current.src) === src) {
+        current.loop = !!loop
+        current.volume = clamp01(volume)
+        current.muted = volume === 0
+        if (current.paused) current.play().catch(() => {})
+        return
+      }
+
+      const back = layers[1 - front]
+      back.loop = !!loop
+      back.volume = clamp01(volume)
+      back.muted = volume === 0
+      back.src = src
+
+      const swap = () => {
+        back.classList.add('visible')
+        current.classList.remove('visible')
+        // Стараемся освободить память старого слоя после перехода
+        setTimeout(() => {
+          current.pause()
+          current.removeAttribute('src')
+          current.load()
+        }, 900)
+        front = 1 - front
+      }
+
+      back.play().then(swap).catch(() => {
+        // canplay как запасной вариант (autoplay мог не стартовать мгновенно)
+        back.addEventListener('canplay', () => back.play().then(swap).catch(() => {}), { once: true })
+      })
     })
 
     // В режиме «последовательность» (loop=false) сообщаем главному процессу,
     // что видео доиграло — он включит следующий клип в цикле
-    video.addEventListener('ended', () => {
-      window.wallpaperApi.notifyEnded()
-    })
+    layers.forEach((v) =>
+      v.addEventListener('ended', () => {
+        if (v === activeVideo()) window.wallpaperApi.notifyEnded()
+      })
+    )
 
-    window.wallpaperApi.onPause(() => video.pause())
-    window.wallpaperApi.onResume(() => video.play().catch(() => {}))
+    window.wallpaperApi.onPause(() => activeVideo().pause())
+    window.wallpaperApi.onResume(() => activeVideo().play().catch(() => {}))
     window.wallpaperApi.onVolume((v) => {
-      video.volume = Math.max(0, Math.min(1, v))
-      video.muted = v === 0
+      for (const layer of layers) {
+        layer.volume = clamp01(v)
+        layer.muted = v === 0
+      }
     })
   </script>
 </body>

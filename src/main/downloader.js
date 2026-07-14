@@ -1,4 +1,5 @@
-// Скачивание YouTube-видео (целиком или отрезком) через yt-dlp (+ ffmpeg).
+// Скачивание YouTube-видео (целиком или отрезком) через yt-dlp (+ ffmpeg),
+// миниатюры клипов, добавление локальных файлов, обновление yt-dlp.
 // Бинарники ожидаются в папке bin/ (кладутся скриптом `npm run setup`) либо в PATH.
 
 const { spawn } = require('child_process')
@@ -6,6 +7,7 @@ const fs = require('fs')
 const path = require('path')
 
 let videosDir = null
+let thumbsDir = null
 
 const YT_HOSTS = new Set([
   'youtube.com',
@@ -16,9 +18,13 @@ const YT_HOSTS = new Set([
   'www.youtu.be',
 ])
 
+const LOCAL_VIDEO_EXT = new Set(['.mp4', '.webm', '.mkv', '.mov', '.m4v'])
+
 function init(userDataDir) {
   videosDir = path.join(userDataDir, 'videos')
+  thumbsDir = path.join(userDataDir, 'thumbs')
   fs.mkdirSync(videosDir, { recursive: true })
+  fs.mkdirSync(thumbsDir, { recursive: true })
 }
 
 /**
@@ -41,17 +47,39 @@ function validateUrl(url) {
   return null
 }
 
+/** Проверка локального видеофайла (drag&drop). */
+function validateLocalFile(filePath) {
+  if (!filePath || typeof filePath !== 'string') return 'Не удалось получить путь к файлу'
+  if (!fs.existsSync(filePath)) return 'Файл не найден'
+  const ext = path.extname(filePath).toLowerCase()
+  if (!LOCAL_VIDEO_EXT.has(ext)) {
+    return `Формат ${ext || '(без расширения)'} не поддерживается. Нужен: mp4, webm, mkv, mov`
+  }
+  return null
+}
+
+function binDirCandidates() {
+  const dirs = [path.join(__dirname, '..', '..', 'bin')]
+  // В собранном приложении (electron-builder) бинарники лежат в resources/bin
+  if (process.resourcesPath) dirs.push(path.join(process.resourcesPath, 'bin'))
+  return dirs
+}
+
 function binPath(name) {
   const exe = process.platform === 'win32' ? `${name}.exe` : name
-  const local = path.join(__dirname, '..', '..', 'bin', exe)
-  if (fs.existsSync(local)) return local
+  for (const dir of binDirCandidates()) {
+    const p = path.join(dir, exe)
+    if (fs.existsSync(p)) return p
+  }
   return name // надеемся на PATH
 }
 
 function ffmpegDir() {
-  const dir = path.join(__dirname, '..', '..', 'bin')
   const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
-  return fs.existsSync(path.join(dir, exe)) ? dir : null
+  for (const dir of binDirCandidates()) {
+    if (fs.existsSync(path.join(dir, exe))) return dir
+  }
+  return null
 }
 
 /** "1:23" | "01:02:03" | "83" -> секунды */
@@ -62,6 +90,33 @@ function parseTime(t) {
   const parts = s.split(':').map(Number)
   if (parts.some(isNaN) || parts.length > 3) return null
   return parts.reduce((acc, p) => acc * 60 + p, 0)
+}
+
+/** Переводит сырой лог yt-dlp в понятное человеку сообщение. */
+function humanizeError(stderr, code) {
+  const s = (stderr || '').toLowerCase()
+  if (s.includes('private video')) return 'Это приватное видео — его нельзя скачать'
+  if (s.includes('video unavailable')) return 'Видео недоступно (удалено или скрыто автором)'
+  if (s.includes('sign in to confirm your age') || s.includes('age-restricted'))
+    return 'У видео возрастное ограничение — YouTube требует вход в аккаунт'
+  if (s.includes('not available in your country') || s.includes('geo restricted') || s.includes('blocked in your'))
+    return 'Видео заблокировано для вашего региона'
+  if (s.includes('is not a valid url') || s.includes('unsupported url'))
+    return 'Ссылка не распознана как видео YouTube'
+  if (s.includes('live event') || s.includes('premieres in'))
+    return 'Это трансляция или премьера — дождитесь публикации записи'
+  if (
+    s.includes('unable to extract') ||
+    s.includes('http error 403') ||
+    s.includes('sig extraction failed') ||
+    s.includes('nsig')
+  )
+    return 'YouTube изменил сайт — обновите yt-dlp кнопкой «Обновить yt-dlp» в настройках'
+  if (s.includes('getaddrinfo') || s.includes('network') || s.includes('timed out') || s.includes('connection'))
+    return 'Проблема с интернет-соединением — проверьте сеть и попробуйте снова'
+  if (s.includes('no space left')) return 'На диске закончилось место'
+  const lastLines = (stderr || '').trim().split('\n').slice(-2).join(' | ')
+  return lastLines || `yt-dlp завершился с кодом ${code}`
 }
 
 /**
@@ -82,6 +137,27 @@ function fetchTitle(url) {
       const title = out.trim().split('\n')[0]
       resolve(code === 0 && title ? title : null)
     })
+  })
+}
+
+/**
+ * Вытаскивает кадр из видео для миниатюры плейлиста.
+ * @returns {Promise<string|null>} путь к jpg или null (не критично)
+ */
+function makeThumbnail(videoPath, clipId) {
+  return new Promise((resolve) => {
+    const ffDir = ffmpegDir()
+    const ffmpeg = ffDir
+      ? path.join(ffDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg')
+      : 'ffmpeg'
+    const outFile = path.join(thumbsDir, `${clipId}.jpg`)
+    const proc = spawn(
+      ffmpeg,
+      ['-y', '-ss', '1', '-i', videoPath, '-frames:v', '1', '-vf', 'scale=320:-2', '-q:v', '4', outFile],
+      { windowsHide: true }
+    )
+    proc.on('error', () => resolve(null))
+    proc.on('close', (code) => resolve(code === 0 && fs.existsSync(outFile) ? outFile : null))
   })
 }
 
@@ -160,23 +236,76 @@ function downloadClip(clip, onProgress) {
       if (code === 0 && fs.existsSync(outFile)) {
         resolve(outFile)
       } else {
-        const lastLines = stderr.trim().split('\n').slice(-3).join(' | ')
-        reject(new Error(lastLines || `yt-dlp завершился с кодом ${code}`))
+        reject(new Error(humanizeError(stderr, code)))
+      }
+    })
+  })
+}
+
+/** Обновляет yt-dlp до последней версии (yt-dlp -U). */
+function updateYtDlp() {
+  return new Promise((resolve) => {
+    const proc = spawn(binPath('yt-dlp'), ['-U'], { windowsHide: true })
+    let out = ''
+    proc.stdout.on('data', (d) => (out += d.toString()))
+    proc.stderr.on('data', (d) => (out += d.toString()))
+    proc.on('error', (err) => {
+      resolve({
+        ok: false,
+        message:
+          err.code === 'ENOENT'
+            ? 'yt-dlp не найден — запустите `npm run setup`'
+            : String(err.message || err),
+      })
+    })
+    proc.on('close', (code) => {
+      const text = out.trim()
+      if (code === 0) {
+        const upToDate = /is up to date/i.test(text)
+        resolve({
+          ok: true,
+          message: upToDate ? 'yt-dlp уже последней версии' : 'yt-dlp обновлён до последней версии',
+        })
+      } else {
+        resolve({ ok: false, message: 'Не удалось обновить: ' + text.split('\n').slice(-1)[0] })
       }
     })
   })
 }
 
 function removeClipFile(clip) {
-  if (!clip || !clip.filePath) return
-  // Удаляем только файлы из нашей папки videos — защита от удаления чужих файлов
-  const resolved = path.resolve(clip.filePath)
-  if (!videosDir || !resolved.startsWith(path.resolve(videosDir) + path.sep)) return
-  try {
-    fs.unlinkSync(resolved)
-  } catch (_) {
-    /* уже удалён */
+  if (!clip) return
+  // Локальные файлы пользователя не трогаем — удаляем только скачанное нами
+  if (clip.filePath && clip.source !== 'local') {
+    const resolved = path.resolve(clip.filePath)
+    if (videosDir && resolved.startsWith(path.resolve(videosDir) + path.sep)) {
+      try {
+        fs.unlinkSync(resolved)
+      } catch (_) {
+        /* уже удалён */
+      }
+    }
+  }
+  if (clip.thumbPath) {
+    const resolvedThumb = path.resolve(clip.thumbPath)
+    if (thumbsDir && resolvedThumb.startsWith(path.resolve(thumbsDir) + path.sep)) {
+      try {
+        fs.unlinkSync(resolvedThumb)
+      } catch (_) {
+        /* уже удалён */
+      }
+    }
   }
 }
 
-module.exports = { init, downloadClip, removeClipFile, parseTime, validateUrl, fetchTitle }
+module.exports = {
+  init,
+  downloadClip,
+  removeClipFile,
+  parseTime,
+  validateUrl,
+  validateLocalFile,
+  fetchTitle,
+  makeThumbnail,
+  updateYtDlp,
+}

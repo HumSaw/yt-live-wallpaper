@@ -20,6 +20,11 @@ const DEFAULT_STATE = {
     playbackMode: 'sequence',
     playlistIntervalSec: 300,
     pauseOnFullscreen: true,
+    // Экономия ресурсов
+    pauseWhenCovered: false, // пауза, когда окно развёрнуто и рабочий стол не виден
+    pauseOnBattery: false, // пауза при работе от батареи (ноутбуки)
+    // Мониторы: 'primary' — основной, 'all' — все, либо id конкретного дисплея
+    targetDisplay: 'primary',
     autostart: false,
     autoResume: true,
     activeClipId: null,
@@ -98,16 +103,18 @@ function update(mutator) {
   return state
 }
 
-function addClip({ url, start, end }) {
+function addClip({ url, start, end, source = 'youtube', title = null, filePath = null, status = 'downloading' }) {
   const clip = {
     id: crypto.randomUUID(),
     url,
     start,
     end,
-    title: null, // подтянется асинхронно через yt-dlp
-    status: 'downloading',
+    source, // 'youtube' | 'local'
+    title, // для YouTube подтянется асинхронно через yt-dlp
+    status,
     progress: 0,
-    filePath: null,
+    filePath,
+    thumbPath: null, // миниатюра, генерируется ffmpeg
     error: null,
     createdAt: Date.now(),
   }

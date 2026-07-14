@@ -1,5 +1,7 @@
-// Определяет, запущено ли полноэкранное приложение (игра, видео и т.п.),
-// чтобы ставить видео-обои на паузу и экономить GPU. Только Windows.
+// Определяет, нужно ли ставить видео-обои на паузу для экономии GPU:
+//  - полноэкранное приложение (игра, видео) — настройка pauseOnFullscreen
+//  - окно развёрнуто на весь экран, рабочий стол не виден — настройка pauseWhenCovered
+// Только Windows.
 
 const { screen } = require('electron')
 const wallpaper = require('./wallpaper')
@@ -29,12 +31,20 @@ function isForegroundFullscreen() {
   }
 }
 
-function start(onChange) {
+/**
+ * @param {() => {fullscreen: boolean, covered: boolean}} getOptions
+ *   какие условия паузы включены в настройках
+ * @param {(shouldPause: boolean) => void} onChange
+ */
+function start(getOptions, onChange) {
   stop()
   if (process.platform !== 'win32') return
   let last = false
   timer = setInterval(() => {
-    const now = isForegroundFullscreen()
+    const opts = getOptions()
+    let now = false
+    if (opts.fullscreen && isForegroundFullscreen()) now = true
+    if (!now && opts.covered && wallpaper.isForegroundMaximized()) now = true
     if (now !== last) {
       last = now
       onChange(now)

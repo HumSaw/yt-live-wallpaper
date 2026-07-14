@@ -12,7 +12,10 @@ function render() {
   const badge = $('status-badge')
   const statusText = $('status-text')
   const toggleBtn = $('btn-toggle-wallpaper')
-  if (state.wallpaperActive && state.pausedByFullscreen) {
+  if (state.wallpaperActive && state.pausedByBattery) {
+    statusText.textContent = 'Пауза (батарея)'
+    badge.className = 'badge badge-paused'
+  } else if (state.wallpaperActive && state.pausedByFullscreen) {
     statusText.textContent = 'Пауза (полный экран)'
     badge.className = 'badge badge-paused'
   } else if (state.wallpaperActive) {
@@ -38,13 +41,55 @@ function render() {
   $('interval-row').classList.toggle('hidden', s.playbackMode !== 'timer')
   $('interval').value = s.playlistIntervalSec
 
+  // Мониторы
+  renderDisplays()
+
   // Настройки
   $('volume').value = Math.round(s.volume * 100)
   $('volume-label').textContent = s.muted ? 'выкл' : `${Math.round(s.volume * 100)}%`
   $('btn-mute').textContent = s.muted ? 'Вкл. звук' : 'Выкл. звук'
   $('pause-fullscreen').checked = s.pauseOnFullscreen
+  $('pause-covered').checked = !!s.pauseWhenCovered
+  $('pause-battery').checked = !!s.pauseOnBattery
   $('autostart').checked = s.autostart
   $('auto-resume').checked = s.autoResume
+}
+
+function renderDisplays() {
+  const select = $('display-select')
+  const displays = state.displays || []
+  const s = state.settings
+  select.innerHTML = ''
+
+  const optPrimary = document.createElement('option')
+  optPrimary.value = 'primary'
+  optPrimary.textContent = 'Основной монитор'
+  select.appendChild(optPrimary)
+
+  if (displays.length > 1) {
+    const optAll = document.createElement('option')
+    optAll.value = 'all'
+    optAll.textContent = 'Все мониторы'
+    select.appendChild(optAll)
+
+    for (const d of displays) {
+      const opt = document.createElement('option')
+      opt.value = d.id
+      opt.textContent = d.label
+      select.appendChild(opt)
+    }
+  }
+
+  select.value = ['primary', 'all'].includes(s.targetDisplay)
+    ? s.targetDisplay
+    : displays.some((d) => d.id === String(s.targetDisplay))
+      ? String(s.targetDisplay)
+      : 'primary'
+  select.disabled = displays.length <= 1
+}
+
+function fileUrl(p) {
+  return 'file:///' + String(p).replace(/\\/g, '/')
 }
 
 function renderClips() {
@@ -61,6 +106,20 @@ function renderClips() {
     order.className = 'clip-order'
     order.textContent = String(i + 1)
     li.appendChild(order)
+
+    // Миниатюра кадра из видео
+    const thumbWrap = document.createElement('div')
+    thumbWrap.className = 'clip-thumb'
+    if (clip.thumbPath) {
+      const img = document.createElement('img')
+      img.src = fileUrl(clip.thumbPath)
+      img.alt = ''
+      thumbWrap.appendChild(img)
+    } else {
+      thumbWrap.classList.add('clip-thumb-empty')
+      thumbWrap.textContent = clip.status === 'downloading' ? '...' : '▶'
+    }
+    li.appendChild(thumbWrap)
 
     const info = document.createElement('div')
     info.className = 'clip-info'
@@ -79,12 +138,14 @@ function renderClips() {
 
     const meta = document.createElement('div')
     meta.className = 'clip-meta'
+    const sourceLabel = clip.source === 'local' ? 'локальный файл' : null
     const range =
       clip.start || clip.end
         ? `отрезок ${clip.start || '0:00'} – ${clip.end || 'конец'}`
         : 'всё видео'
+    const metaParts = [sourceLabel, range].filter(Boolean).join(' · ')
     if (clip.status === 'downloading') {
-      meta.textContent = `Загрузка ${Math.round(clip.progress || 0)}% · ${range}`
+      meta.textContent = `Загрузка ${Math.round(clip.progress || 0)}% · ${metaParts}`
       const bar = document.createElement('div')
       bar.className = 'progress'
       const fill = document.createElement('div')
@@ -98,7 +159,7 @@ function renderClips() {
       meta.className = 'clip-meta error'
       info.appendChild(meta)
     } else {
-      meta.textContent = `Готов · ${range}`
+      meta.textContent = `Готов · ${metaParts}`
       info.appendChild(meta)
     }
 
@@ -165,6 +226,33 @@ $('add-form').addEventListener('submit', async (e) => {
   $('end').value = ''
 })
 
+// ---------- Drag & drop локальных файлов ----------
+const dropZone = $('drop-zone')
+
+for (const evt of ['dragenter', 'dragover']) {
+  document.addEventListener(evt, (e) => {
+    e.preventDefault()
+    dropZone.classList.add('drag-over')
+  })
+}
+for (const evt of ['dragleave', 'drop']) {
+  document.addEventListener(evt, (e) => {
+    e.preventDefault()
+    if (evt === 'dragleave' && e.relatedTarget) return
+    dropZone.classList.remove('drag-over')
+  })
+}
+document.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  showFormError(null)
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (files.length === 0) return
+  for (const file of files) {
+    const result = await window.api.addLocalFile(file)
+    if (result && result.error) showFormError(result.error)
+  }
+})
+
 // ---------- Управление ----------
 $('btn-toggle-wallpaper').addEventListener('click', async () => {
   if (state.wallpaperActive) await window.api.stopWallpaper()
@@ -190,8 +278,20 @@ $('interval').addEventListener('change', (e) => {
   window.api.setSettings({ playlistIntervalSec: v })
 })
 
+$('display-select').addEventListener('change', (e) => {
+  window.api.setSettings({ targetDisplay: e.target.value })
+})
+
 $('pause-fullscreen').addEventListener('change', (e) => {
   window.api.setSettings({ pauseOnFullscreen: e.target.checked })
+})
+
+$('pause-covered').addEventListener('change', (e) => {
+  window.api.setSettings({ pauseWhenCovered: e.target.checked })
+})
+
+$('pause-battery').addEventListener('change', (e) => {
+  window.api.setSettings({ pauseOnBattery: e.target.checked })
 })
 
 $('autostart').addEventListener('change', (e) => {
@@ -200,6 +300,19 @@ $('autostart').addEventListener('change', (e) => {
 
 $('auto-resume').addEventListener('change', (e) => {
   window.api.setSettings({ autoResume: e.target.checked })
+})
+
+// ---------- Обновление yt-dlp ----------
+$('btn-update-ytdlp').addEventListener('click', async () => {
+  const btn = $('btn-update-ytdlp')
+  const status = $('ytdlp-status')
+  btn.disabled = true
+  status.textContent = 'Обновляю...'
+  status.className = 'ytdlp-status'
+  const result = await window.api.updateYtDlp()
+  status.textContent = result.message
+  status.className = 'ytdlp-status ' + (result.ok ? 'ok' : 'error')
+  btn.disabled = false
 })
 
 // ---------- Инициализация ----------

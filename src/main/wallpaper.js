@@ -42,6 +42,16 @@ function loadUser32() {
     'intptr',
     'uint',
   ])
+  const GetSystemMetrics = user32.func('__stdcall', 'GetSystemMetrics', 'int', ['int'])
+  const MoveWindow = user32.func('__stdcall', 'MoveWindow', 'bool', [
+    'intptr',
+    'int',
+    'int',
+    'int',
+    'int',
+    'bool',
+  ])
+  const IsZoomed = user32.func('__stdcall', 'IsZoomed', 'bool', ['intptr'])
 
   fns = {
     koffi,
@@ -54,6 +64,9 @@ function loadUser32() {
     GetWindowRect,
     GetShellWindow,
     SystemParametersInfoW,
+    GetSystemMetrics,
+    MoveWindow,
+    IsZoomed,
   }
   return fns
 }
@@ -63,8 +76,15 @@ function loadUser32() {
  * 1. Находим Progman
  * 2. Шлём ему 0x052C — Windows создаёт окно WorkerW позади иконок
  * 3. Находим этот WorkerW и делаем его родителем нашего окна
+ *
+ * @param {BrowserWindow} browserWindow
+ * @param {{x:number,y:number,width:number,height:number}|null} physicalBounds
+ *   Физические (в пикселях) границы дисплея, на который встают обои.
+ *   После SetParent координаты окна становятся относительными к WorkerW,
+ *   который охватывает ВЕСЬ виртуальный экран — поэтому пересчитываем
+ *   позицию относительно начала виртуального экрана.
  */
-function attachToDesktop(browserWindow) {
+function attachToDesktop(browserWindow, physicalBounds) {
   if (process.platform !== 'win32') return false
   try {
     const f = loadUser32()
@@ -98,9 +118,36 @@ function attachToDesktop(browserWindow) {
     // тогда родителем можно сделать сам Progman
     const target = workerw || progman
     f.SetParent(hwnd, target)
+
+    if (physicalBounds) {
+      // SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77 — начало виртуального экрана
+      const vx = f.GetSystemMetrics(76)
+      const vy = f.GetSystemMetrics(77)
+      f.MoveWindow(
+        hwnd,
+        physicalBounds.x - vx,
+        physicalBounds.y - vy,
+        physicalBounds.width,
+        physicalBounds.height,
+        true
+      )
+    }
     return true
   } catch (err) {
     console.error('[wallpaper] attachToDesktop error:', err)
+    return false
+  }
+}
+
+/** true, если окно переднего плана развёрнуто на весь экран (maximized). */
+function isForegroundMaximized() {
+  if (process.platform !== 'win32') return false
+  try {
+    const f = loadUser32()
+    const fg = f.GetForegroundWindow()
+    if (!fg || fg === f.GetShellWindow()) return false
+    return !!f.IsZoomed(fg)
+  } catch (_) {
     return false
   }
 }
@@ -117,4 +164,4 @@ function refreshDesktop() {
   }
 }
 
-module.exports = { attachToDesktop, refreshDesktop, loadUser32 }
+module.exports = { attachToDesktop, refreshDesktop, loadUser32, isForegroundMaximized }

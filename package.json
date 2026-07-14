@@ -1,18 +1,54 @@
 {
   "name": "yt-live-wallpaper",
-  "version": "0.1.0",
-  "description": "Живые обои для Windows из отрезков YouTube-видео (4K)",
+  "version": "0.2.0",
+  "description": "Живые 4K-обои для Windows из YouTube-видео и локальных файлов",
   "private": true,
   "main": "src/main/main.js",
+  "author": "YT Live Wallpaper",
   "scripts": {
     "start": "electron .",
-    "setup": "node scripts/setup-bins.mjs"
+    "setup": "node scripts/setup-bins.mjs",
+    "dist": "electron-builder --win"
   },
   "dependencies": {
     "koffi": "^2.9.0"
   },
   "devDependencies": {
-    "electron": "^33.0.0"
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "app.ytlivewallpaper",
+    "productName": "YT Live Wallpaper",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "!src/renderer/dev-mock.js"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    }
   },
   "pnpm": {
     "onlyBuiltDependencies": [

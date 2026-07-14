@@ -80,6 +80,11 @@
 
           <button type="submit" class="btn btn-primary btn-add">Скачать и добавить</button>
         </form>
+
+        <div id="drop-zone" class="drop-zone">
+          <span class="drop-icon" aria-hidden="true">⤓</span>
+          <span>Или перетащи сюда свой видеофайл — mp4, webm, mkv, mov</span>
+        </div>
       </section>
 
       <!-- ШАГ 2: плейлист -->
@@ -154,9 +159,24 @@
             </div>
           </div>
 
+          <div class="setting">
+            <label for="display-select">Монитор для обоев</label>
+            <select id="display-select" class="select"></select>
+          </div>
+
           <label class="setting setting-toggle">
             <input id="pause-fullscreen" type="checkbox" />
             <span>Пауза при играх и полноэкранных приложениях <em>(экономит видеокарту)</em></span>
+          </label>
+
+          <label class="setting setting-toggle">
+            <input id="pause-covered" type="checkbox" />
+            <span>Пауза, когда окно развёрнуто и рабочий стол не виден <em>(максимальная экономия)</em></span>
+          </label>
+
+          <label class="setting setting-toggle">
+            <input id="pause-battery" type="checkbox" />
+            <span>Пауза при работе от батареи <em>(для ноутбуков)</em></span>
           </label>
 
           <label class="setting setting-toggle">
@@ -168,6 +188,14 @@
             <input id="auto-resume" type="checkbox" />
             <span>Включать обои сразу при запуске приложения</span>
           </label>
+
+          <div class="setting setting-ytdlp">
+            <div class="ytdlp-row">
+              <button id="btn-update-ytdlp" type="button" class="btn btn-ghost btn-small">Обновить yt-dlp</button>
+              <span id="ytdlp-status" class="ytdlp-status"></span>
+            </div>
+            <p class="hint">Если видео перестали скачиваться — YouTube изменился, обновление обычно чинит</p>
+          </div>
         </div>
       </section>
     </main>
