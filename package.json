@@ -4,7 +4,9 @@
   "description": "Живые 4K-обои для Windows из YouTube-видео и локальных файлов",
   "private": true,
   "main": "src/main/main.js",
+  "license": "MIT",
   "author": "YT Live Wallpaper",
+  "keywords": ["electron", "wallpaper", "live-wallpaper", "youtube", "yt-dlp", "windows", "workerw"],
   "scripts": {
     "start": "electron .",
     "setup": "node scripts/setup-bins.mjs",

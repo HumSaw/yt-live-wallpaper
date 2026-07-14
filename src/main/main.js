@@ -16,7 +16,6 @@ let currentClipId = null
 let pausedByMonitor = false // пауза из-за полного экрана / перекрытого стола
 let pausedByBattery = false
 
-// ---------- Хелперы плейлиста ----------
 function readyClips() {
   return store.get().clips.filter((c) => c.status === 'ready')
 }
@@ -36,7 +35,6 @@ function eachWallpaperWindow(fn) {
   }
 }
 
-// ---------- Окно управления ----------
 function createControlWindow() {
   if (controlWindow) {
     controlWindow.show()
@@ -70,7 +68,6 @@ function createControlWindow() {
   })
 }
 
-// ---------- Дисплеи ----------
 function targetDisplays() {
   const setting = store.get().settings.targetDisplay
   const all = screen.getAllDisplays()
@@ -89,7 +86,6 @@ function displaysForRenderer() {
   }))
 }
 
-// ---------- Окна-обои ----------
 function createWallpaperWindowForDisplay(display) {
   const existing = wallpaperWindows.get(display.id)
   if (existing && !existing.isDestroyed()) return existing
@@ -156,7 +152,6 @@ function destroyWallpaperWindows() {
   if (IS_WINDOWS) wallpaper.refreshDesktop()
 }
 
-// ---------- Воспроизведение ----------
 function playClipById(id) {
   const clips = readyClips()
   if (clips.length === 0) return
@@ -219,7 +214,6 @@ function stopPlaylistTimer() {
   }
 }
 
-// ---------- Пауза/возобновление ----------
 function applyPauseState() {
   const shouldPause = pausedByMonitor || pausedByBattery
   eachWallpaperWindow((win) =>
@@ -229,7 +223,6 @@ function applyPauseState() {
   updateTrayMenu()
 }
 
-// ---------- Состояние для UI ----------
 function getStateForRenderer() {
   const s = store.get()
   return {
@@ -249,7 +242,6 @@ function broadcastState() {
   }
 }
 
-// ---------- Общая логика добавления клипа ----------
 function startClipDownload(clip) {
   // Название видео подтягиваем параллельно с загрузкой
   downloader.fetchTitle(clip.url).then((title) => {
@@ -279,7 +271,6 @@ function startClipDownload(clip) {
     })
 }
 
-// ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('state:get', () => getStateForRenderer())
 
@@ -406,7 +397,6 @@ function registerIpc() {
   })
 }
 
-// ---------- Мониторинг полного экрана / перекрытия ----------
 function syncMonitorState() {
   const s = store.get().settings
   if (s.pauseOnFullscreen || s.pauseWhenCovered) {
@@ -431,7 +421,6 @@ function syncMonitorState() {
   }
 }
 
-// ---------- Батарея ----------
 function setupPowerMonitor() {
   powerMonitor.on('on-battery', () => {
     if (store.get().settings.pauseOnBattery) {
@@ -456,7 +445,6 @@ function setupPowerMonitor() {
   })
 }
 
-// ---------- Трей ----------
 function updateTrayMenu() {
   if (!tray) return
   const active = wallpaperActive()
@@ -506,7 +494,6 @@ function createTray() {
   tray.on('double-click', () => createControlWindow())
 }
 
-// ---------- Запуск ----------
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()

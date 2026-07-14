@@ -1,17 +1,16 @@
-// Логика панели управления. Общается с главным процессом через window.api.
+// Панель управления. Всё общение с main-процессом идёт через window.api (см. preload.js).
 
 let state = null
 
 const $ = (id) => document.getElementById(id)
 
-// ---------- Рендер ----------
 function render() {
   if (!state) return
 
-  // Бейдж статуса и главная кнопка
   const badge = $('status-badge')
   const statusText = $('status-text')
   const toggleBtn = $('btn-toggle-wallpaper')
+
   if (state.wallpaperActive && state.pausedByBattery) {
     statusText.textContent = 'Пауза (батарея)'
     badge.className = 'badge badge-paused'
@@ -27,13 +26,11 @@ function render() {
   }
   toggleBtn.textContent = state.wallpaperActive ? 'Остановить обои' : 'Запустить обои'
 
-  // Предупреждение о платформе
   $('platform-warning').classList.toggle('hidden', state.platformSupported)
 
-  // Список клипов
   renderClips()
+  renderDisplays()
 
-  // Режим воспроизведения
   const s = state.settings
   for (const radio of document.querySelectorAll('input[name="playback-mode"]')) {
     radio.checked = radio.value === s.playbackMode
@@ -41,10 +38,6 @@ function render() {
   $('interval-row').classList.toggle('hidden', s.playbackMode !== 'timer')
   $('interval').value = s.playlistIntervalSec
 
-  // Мониторы
-  renderDisplays()
-
-  // Настройки
   $('volume').value = Math.round(s.volume * 100)
   $('volume-label').textContent = s.muted ? 'выкл' : `${Math.round(s.volume * 100)}%`
   $('btn-mute').textContent = s.muted ? 'Вкл. звук' : 'Выкл. звук'
@@ -104,10 +97,9 @@ function renderClips() {
 
     const order = document.createElement('span')
     order.className = 'clip-order'
-    order.textContent = String(i + 1)
+    order.textContent = String(i + 1).padStart(2, '0')
     li.appendChild(order)
 
-    // Миниатюра кадра из видео
     const thumbWrap = document.createElement('div')
     thumbWrap.className = 'clip-thumb'
     if (clip.thumbPath) {
@@ -117,7 +109,7 @@ function renderClips() {
       thumbWrap.appendChild(img)
     } else {
       thumbWrap.classList.add('clip-thumb-empty')
-      thumbWrap.textContent = clip.status === 'downloading' ? '...' : '▶'
+      thumbWrap.textContent = clip.status === 'downloading' ? '…' : '▶'
     }
     li.appendChild(thumbWrap)
 
@@ -144,6 +136,7 @@ function renderClips() {
         ? `отрезок ${clip.start || '0:00'} – ${clip.end || 'конец'}`
         : 'всё видео'
     const metaParts = [sourceLabel, range].filter(Boolean).join(' · ')
+
     if (clip.status === 'downloading') {
       meta.textContent = `Загрузка ${Math.round(clip.progress || 0)}% · ${metaParts}`
       const bar = document.createElement('div')
@@ -186,17 +179,18 @@ function renderClips() {
   })
 }
 
-// ---------- Форма добавления ----------
 function showFormError(msg) {
   const el = $('form-error')
   el.textContent = msg || ''
   el.classList.toggle('hidden', !msg)
 }
 
+// переключатель «всё видео / отрезок»
 for (const radio of document.querySelectorAll('input[name="range-mode"]')) {
   radio.addEventListener('change', () => {
     const isClip = document.querySelector('input[name="range-mode"]:checked').value === 'clip'
     $('timecodes').classList.toggle('hidden', !isClip)
+    $('timecode-hint').classList.toggle('hidden', !isClip)
     if (!isClip) {
       $('start').value = ''
       $('end').value = ''
@@ -226,7 +220,7 @@ $('add-form').addEventListener('submit', async (e) => {
   $('end').value = ''
 })
 
-// ---------- Drag & drop локальных файлов ----------
+// drag&drop своих видеофайлов
 const dropZone = $('drop-zone')
 
 for (const evt of ['dragenter', 'dragover']) {
@@ -253,7 +247,6 @@ document.addEventListener('drop', async (e) => {
   }
 })
 
-// ---------- Управление ----------
 $('btn-toggle-wallpaper').addEventListener('click', async () => {
   if (state.wallpaperActive) await window.api.stopWallpaper()
   else await window.api.startWallpaper()
@@ -302,7 +295,6 @@ $('auto-resume').addEventListener('change', (e) => {
   window.api.setSettings({ autoResume: e.target.checked })
 })
 
-// ---------- Обновление yt-dlp ----------
 $('btn-update-ytdlp').addEventListener('click', async () => {
   const btn = $('btn-update-ytdlp')
   const status = $('ytdlp-status')
@@ -315,7 +307,6 @@ $('btn-update-ytdlp').addEventListener('click', async () => {
   btn.disabled = false
 })
 
-// ---------- Инициализация ----------
 window.api.onStateUpdate((s) => {
   state = s
   render()
