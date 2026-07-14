@@ -1,0 +1,43 @@
+# Сборка установщика при пуше тега вида v1.2.3
+# Готовый .exe прикрепляется к GitHub Release автоматически.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download yt-dlp and ffmpeg
+        run: pnpm run setup
+
+      - name: Build installer
+        run: pnpm run dist
+
+      - name: Attach installer to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/*.blockmap
+          generate_release_notes: true

@@ -11,9 +11,16 @@
 
   <div class="app">
     <header class="hero">
-      <img class="hero-art" src="../../assets/header-art.png" alt="" aria-hidden="true" />
+      <img class="hero-art hero-art-night" src="../../assets/header-art.png" alt="" aria-hidden="true" />
+      <img class="hero-art hero-art-day" src="../../assets/header-art-day.png" alt="" aria-hidden="true" />
+      <canvas id="hero-fx" class="hero-fx" aria-hidden="true"></canvas>
       <div class="hero-overlay"></div>
       <div class="hero-scanlines" aria-hidden="true"></div>
+
+      <button id="btn-theme" class="theme-toggle" type="button" aria-label="Переключить тему">
+        <span class="theme-toggle-icon" aria-hidden="true"></span>
+        <span id="theme-toggle-label">День</span>
+      </button>
 
       <span class="hero-kana hero-kana-left" aria-hidden="true">ライブ壁紙</span>
       <span class="hero-kana hero-kana-right" aria-hidden="true">デスクトップ</span>
@@ -223,5 +230,6 @@
 
   <script src="dev-mock.js"></script>
   <script src="app.js"></script>
+  <script src="hero-fx.js"></script>
 </body>
 </html>

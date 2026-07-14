@@ -28,6 +28,7 @@ const DEFAULT_STATE = {
     autostart: false,
     autoResume: true,
     activeClipId: null,
+    theme: 'night', // тема панели: 'night' | 'day'
   },
 }
 

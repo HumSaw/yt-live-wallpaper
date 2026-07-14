@@ -1,4 +1,4 @@
-/* тёмный индиго, неон-розовый как у вывесок, циан для акцентов */
+/* Ночь (по умолчанию): тёмный индиго, неон-розовый как у вывесок, циан для акцентов */
 :root {
   --bg: #0a0a11;
   --surface: #12121d;
@@ -14,6 +14,29 @@
   --green: #3ecf8e;
   --yellow: #e9c46a;
   --r: 16px;
+  --hero-fade: rgba(10, 10, 17, 0.96);
+  --hero-fade-mid: rgba(10, 10, 17, 0.55);
+  --hero-fade-top: rgba(10, 10, 17, 0.1);
+}
+
+/* День: тёплая бумага, закатный оранжевый, небесно-синий акцент */
+[data-theme='day'] {
+  --bg: #f6f1e7;
+  --surface: #fffdf7;
+  --surface-2: #f1e9d8;
+  --border: #ddd2ba;
+  --fg: #2b2620;
+  --muted: #857a66;
+  --pink: #e85d2f;
+  --pink-soft: #f4762c;
+  --pink-glow: rgba(232, 93, 47, 0.3);
+  --cyan: #2f7fd1;
+  --cyan-glow: rgba(47, 127, 209, 0.22);
+  --green: #2f9e6e;
+  --yellow: #c98a12;
+  --hero-fade: rgba(246, 241, 231, 0.96);
+  --hero-fade-mid: rgba(246, 241, 231, 0.45);
+  --hero-fade-top: rgba(246, 241, 231, 0.05);
 }
 
 * { box-sizing: border-box; }
@@ -97,17 +120,76 @@ body {
   height: 100%;
   object-fit: cover;
   animation: hero-drift 30s ease-in-out infinite alternate;
+  transition: opacity 0.6s ease;
 }
+
+.hero-art-day { opacity: 0; }
+[data-theme='day'] .hero-art-day { opacity: 1; }
+[data-theme='day'] .hero-art-night { opacity: 0; }
 
 @keyframes hero-drift {
   from { transform: scale(1.0) translateY(0); }
   to { transform: scale(1.08) translateY(-8px); }
 }
 
+/* батл-анимация: скоростные линии, удары, искры */
+.hero-fx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+[data-theme='day'] .hero-fx { mix-blend-mode: normal; }
+
 .hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(10, 10, 17, 0.1) 0%, rgba(10, 10, 17, 0.55) 55%, rgba(10, 10, 17, 0.96) 100%);
+  background: linear-gradient(180deg, var(--hero-fade-top) 0%, var(--hero-fade-mid) 55%, var(--hero-fade) 100%);
+}
+
+/* переключатель темы */
+.theme-toggle {
+  position: absolute;
+  top: 14px;
+  right: 52px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(10, 10, 17, 0.45);
+  color: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.theme-toggle:hover { border-color: var(--cyan); }
+
+.theme-toggle-icon {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 8px var(--yellow);
+}
+
+[data-theme='day'] .theme-toggle {
+  background: rgba(255, 253, 247, 0.55);
+  border-color: rgba(43, 38, 32, 0.25);
+  color: #2b2620;
+}
+
+[data-theme='day'] .theme-toggle-icon {
+  background: #33356b;
+  box-shadow: 0 0 8px rgba(51, 53, 107, 0.7);
 }
 
 /* сканлайны как на старом ЭЛТ */
@@ -117,6 +199,13 @@ body {
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, 0.14) 3px 4px);
   pointer-events: none;
 }
+
+/* днём плёночные эффекты мягче */
+[data-theme='day'] .hero-scanlines {
+  background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, 0.05) 3px 4px);
+}
+
+[data-theme='day'] .noise { opacity: 0.25; }
 
 .hero-kana {
   position: absolute;
@@ -215,6 +304,8 @@ h1.glitch::after {
   background: rgba(10, 10, 17, 0.75);
   backdrop-filter: blur(8px);
 }
+
+[data-theme='day'] .badge { background: rgba(255, 253, 247, 0.8); }
 
 .badge-dot {
   width: 8px;

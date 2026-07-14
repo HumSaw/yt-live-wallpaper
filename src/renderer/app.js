@@ -4,8 +4,16 @@ let state = null
 
 const $ = (id) => document.getElementById(id)
 
+function applyTheme() {
+  const theme = state?.settings?.theme || 'night'
+  document.documentElement.dataset.theme = theme
+  $('theme-toggle-label').textContent = theme === 'day' ? 'Ночь' : 'День'
+}
+
 function render() {
   if (!state) return
+
+  applyTheme()
 
   const badge = $('status-badge')
   const statusText = $('status-text')
@@ -250,6 +258,14 @@ document.addEventListener('drop', async (e) => {
 $('btn-toggle-wallpaper').addEventListener('click', async () => {
   if (state.wallpaperActive) await window.api.stopWallpaper()
   else await window.api.startWallpaper()
+})
+
+$('btn-theme').addEventListener('click', () => {
+  const next = (state?.settings?.theme || 'night') === 'night' ? 'day' : 'night'
+  // мгновенный отклик, не дожидаясь ответа main-процесса
+  if (state) state.settings.theme = next
+  applyTheme()
+  window.api.setSettings({ theme: next })
 })
 
 for (const radio of document.querySelectorAll('input[name="playback-mode"]')) {

@@ -60,6 +60,7 @@ if (!window.api) {
       autostart: false,
       autoResume: true,
       activeClipId: '1',
+      theme: 'night',
     },
     wallpaperActive: true,
     pausedByFullscreen: false,
@@ -80,7 +81,10 @@ if (!window.api) {
     stopWallpaper: () => Promise.resolve(true),
     nextClip: () => Promise.resolve(true),
     updateYtDlp: () => Promise.resolve({ ok: true, message: 'yt-dlp уже последней версии' }),
-    setSettings: () => Promise.resolve(mockState.settings),
+    setSettings: (patch) => {
+      Object.assign(mockState.settings, patch || {})
+      return Promise.resolve(mockState.settings)
+    },
     onStateUpdate: () => () => {},
   }
 }

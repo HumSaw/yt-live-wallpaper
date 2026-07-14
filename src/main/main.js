@@ -219,6 +219,9 @@ function applyPauseState() {
   eachWallpaperWindow((win) =>
     win.webContents.send(shouldPause ? 'wallpaper:pause' : 'wallpaper:resume')
   )
+  // На паузе клипы не должны сменяться по таймеру
+  if (shouldPause) stopPlaylistTimer()
+  else schedulePlaylistTimer()
   broadcastState()
   updateTrayMenu()
 }
@@ -261,7 +264,7 @@ function startClipDownload(clip) {
       const thumbPath = await downloader.makeThumbnail(filePath, clip.id)
       store.updateClip(clip.id, { status: 'ready', filePath, thumbPath, progress: 100 })
       broadcastState()
-      // Если обои ещё не запущены — включаем сразу
+      // Если обои е��ё не запущены — включаем сразу
       if (!wallpaperActive()) startWallpaper()
       else schedulePlaylistTimer()
     })
@@ -363,7 +366,37 @@ function registerIpc() {
     if (store.get().settings.playbackMode === 'sequence') playNextClip()
   })
 
-  ipcMain.handle('settings:set', (_e, patch) => {
+  // Renderer не должен уметь записать в настройки произвольные ключи/значения
+  const SETTING_VALIDATORS = {
+    volume: (v) => (typeof v === 'number' ? Math.min(1, Math.max(0, v)) : undefined),
+    muted: (v) => !!v,
+    playbackMode: (v) => (['single', 'sequence', 'timer'].includes(v) ? v : undefined),
+    playlistIntervalSec: (v) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? Math.min(86400, Math.max(10, Math.round(n))) : undefined
+    },
+    pauseOnFullscreen: (v) => !!v,
+    pauseWhenCovered: (v) => !!v,
+    pauseOnBattery: (v) => !!v,
+    targetDisplay: (v) => (typeof v === 'string' && v.length < 40 ? v : undefined),
+    autostart: (v) => !!v,
+    autoResume: (v) => !!v,
+    theme: (v) => (['night', 'day'].includes(v) ? v : undefined),
+  }
+
+  function sanitizeSettingsPatch(raw) {
+    const clean = {}
+    for (const [key, value] of Object.entries(raw || {})) {
+      const validate = SETTING_VALIDATORS[key]
+      if (!validate) continue
+      const v = validate(value)
+      if (v !== undefined) clean[key] = v
+    }
+    return clean
+  }
+
+  ipcMain.handle('settings:set', (_e, rawPatch) => {
+    const patch = sanitizeSettingsPatch(rawPatch)
     store.update((s) => Object.assign(s.settings, patch))
     const s = store.get().settings
 
@@ -375,10 +408,13 @@ function registerIpc() {
     if ('autostart' in patch) {
       app.setLoginItemSettings({ openAtLogin: !!patch.autostart, args: ['--hidden'] })
     }
-    if ('playbackMode' in patch || 'playlistIntervalSec' in patch) {
+    if ('playbackMode' in patch) {
       // Перезапускаем текущий клип, чтобы применить loop-режим
       if (wallpaperActive() && currentClipId) playClipById(currentClipId)
       else schedulePlaylistTimer()
+    } else if ('playlistIntervalSec' in patch) {
+      // Смена интервала не требует перезапуска видео
+      schedulePlaylistTimer()
     }
     if ('targetDisplay' in patch) {
       // Пересоздаём окна под новый набор мониторов

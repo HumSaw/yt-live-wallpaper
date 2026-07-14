@@ -44,12 +44,15 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "YT-Live-Wallpaper-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
   },
   "pnpm": {
