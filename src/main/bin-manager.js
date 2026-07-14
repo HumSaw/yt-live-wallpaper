@@ -10,10 +10,14 @@ const path = require('path')
 const { spawn } = require('child_process')
 
 const IS_WIN = process.platform === 'win32'
+const IS_MAC = process.platform === 'darwin'
 
+// Автономные сборки yt-dlp (не требуют установленного Python)
 const YTDLP_URL = IS_WIN
   ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
-  : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp'
+  : IS_MAC
+    ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos'
+    : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux'
 const FFMPEG_ZIP_URL =
   'https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip'
 
@@ -153,7 +157,10 @@ async function ensureBinaries(onProgress) {
     if (missing.includes('ffmpeg')) {
       if (!IS_WIN) {
         // На Linux/macOS ffmpeg ставится пакетным менеджером; авто-установка только на Windows
-        return { ok: false, error: 'Установите ffmpeg через пакетный менеджер вашей системы' }
+        const hint = IS_MAC
+          ? 'brew install ffmpeg (нужен Homebrew: brew.sh)'
+          : 'sudo apt install ffmpeg (Debian/Ubuntu) или sudo dnf install ffmpeg (Fedora)'
+        return { ok: false, error: `Установите ffmpeg и перезапустите приложение: ${hint}` }
       }
       const zipPath = path.join(userBinDir, 'ffmpeg.zip')
       onProgress?.({ step: 'ffmpeg', label: 'Видеоконвертер (ffmpeg)', percent: 0 })

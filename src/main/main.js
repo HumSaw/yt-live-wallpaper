@@ -3,12 +3,16 @@ const path = require('path')
 const store = require('./store')
 const downloader = require('./downloader')
 const wallpaper = require('./wallpaper')
+const wallpaperMac = require('./wallpaper-mac')
 const fullscreenMonitor = require('./fullscreen-monitor')
 const binManager = require('./bin-manager')
 const playlist = require('./playlist')
 const tray = require('./tray')
 
 const IS_WINDOWS = process.platform === 'win32'
+const IS_MAC = process.platform === 'darwin'
+const IS_LINUX = process.platform === 'linux'
+const PLATFORM_SUPPORTED = IS_WINDOWS || IS_MAC || IS_LINUX
 const UNDO_WINDOW_MS = 6000
 
 let controlWindow = null
@@ -100,6 +104,10 @@ function createWallpaperWindowForDisplay(display) {
     focusable: false,
     show: false,
     backgroundColor: '#000000',
+    // Linux (X11): окно типа desktop живёт на уровне фона рабочего стола
+    ...(IS_LINUX ? { type: 'desktop' } : {}),
+    // macOS: не показываем окно-обои в Dock и не даём его развернуть
+    ...(IS_MAC ? { hiddenInMissionControl: true, hasShadow: false } : {}),
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload-wallpaper.js'),
       contextIsolation: true,
@@ -117,6 +125,13 @@ function createWallpaperWindowForDisplay(display) {
       const physical = screen.dipToScreenRect(null, display.bounds)
       const ok = wallpaper.attachToDesktop(win, physical)
       if (!ok) console.error('[wallpaper] Не удалось прикрепить окно к рабочему столу')
+    } else if (IS_MAC) {
+      // Опускаем NSWindow на уровень фона рабочего стола (ниже иконок)
+      const ok = wallpaperMac.attachToDesktop(win)
+      if (!ok) console.error('[wallpaper] Не удалось опустить окно на уровень рабочего стола')
+    } else if (IS_LINUX) {
+      // Тип desktop уже задан при создании; дополнительно уходим в самый низ
+      win.blur()
     }
   })
 
@@ -202,7 +217,7 @@ function getStateForRenderer() {
     pausedByFullscreen: pausedByMonitor,
     pausedByBattery,
     displays: displaysForRenderer(),
-    platformSupported: IS_WINDOWS,
+    platformSupported: PLATFORM_SUPPORTED,
     setup: setupState, // null = компоненты готовы, иначе { label, percent, error }
     diskUsage: downloader.getDiskUsage(),
   }
@@ -438,7 +453,8 @@ function registerIpc() {
         win.webContents.send('wallpaper:volume', s.muted ? 0 : s.volume)
       )
     }
-    if ('autostart' in patch) {
+    if ('autostart' in patch && !IS_LINUX) {
+      // setLoginItemSettings работает на Windows и macOS; на Linux — нет
       app.setLoginItemSettings({ openAtLogin: !!patch.autostart, args: ['--hidden'] })
     }
     if ('playbackMode' in patch) {
