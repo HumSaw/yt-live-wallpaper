@@ -94,6 +94,7 @@ function render() {
   $('pause-battery').checked = !!s.pauseOnBattery
   $('autostart').checked = s.autostart
   $('auto-resume').checked = s.autoResume
+  $('disk-usage-value').textContent = formatBytes(state.diskUsage)
 }
 
 function renderDisplays() {
@@ -129,16 +130,33 @@ function renderDisplays() {
   select.disabled = displays.length <= 1
 }
 
+/**
+ * Windows-путь -> корректный file:// URL. Простая конкатенация ломается
+ * на # и ? в именах папок. Буква диска не кодируется.
+ */
 function fileUrl(p) {
-  return 'file:///' + String(p).replace(/\\/g, '/')
+  const segments = String(p)
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+  return 'file:///' + segments.join('/')
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 MB'
+  const mb = bytes / (1024 * 1024)
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
+  return `${Math.round(mb)} MB`
 }
 
 function renderClips() {
   const list = $('clip-list')
   list.innerHTML = ''
-  $('empty-hint').classList.toggle('hidden', state.clips.length > 0)
+  // Клипы, ждущие удаления (окно undo), в списке не показываем
+  const clips = state.clips.filter((c) => !c.pendingRemoval)
+  $('empty-hint').classList.toggle('hidden', clips.length > 0)
 
-  state.clips.forEach((clip, i) => {
+  clips.forEach((clip, i) => {
     const isActive = clip.id === state.settings.activeClipId && state.wallpaperActive
     const li = document.createElement('li')
     li.className = 'clip' + (isActive ? ' active' : '')
@@ -215,10 +233,18 @@ function renderClips() {
       actions.appendChild(playBtn)
     }
 
+    if (clip.status === 'error' && clip.source !== 'local') {
+      const retryBtn = document.createElement('button')
+      retryBtn.className = 'btn btn-small'
+      retryBtn.textContent = t('btnRetry')
+      retryBtn.addEventListener('click', () => window.api.retryClip(clip.id))
+      actions.appendChild(retryBtn)
+    }
+
     const removeBtn = document.createElement('button')
     removeBtn.className = 'btn btn-small btn-ghost btn-danger'
     removeBtn.textContent = t('btnRemove')
-    removeBtn.addEventListener('click', () => window.api.removeClip(clip.id))
+    removeBtn.addEventListener('click', () => removeClipWithUndo(clip.id))
     actions.appendChild(removeBtn)
 
     li.appendChild(info)
@@ -226,6 +252,31 @@ function renderClips() {
     list.appendChild(li)
   })
 }
+
+// Удаление с возможностью отмены: main держит файл ещё 6 секунд
+let undoClipId = null
+let undoToastTimer = null
+
+function removeClipWithUndo(id) {
+  window.api.removeClip(id)
+  undoClipId = id
+  const toast = $('undo-toast')
+  $('undo-toast-text').textContent = t('undoDeleted')
+  toast.classList.remove('hidden')
+  clearTimeout(undoToastTimer)
+  undoToastTimer = setTimeout(() => {
+    toast.classList.add('hidden')
+    undoClipId = null
+  }, 5500)
+}
+
+$('btn-undo').addEventListener('click', async () => {
+  if (!undoClipId) return
+  await window.api.undoRemoveClip(undoClipId)
+  undoClipId = null
+  clearTimeout(undoToastTimer)
+  $('undo-toast').classList.add('hidden')
+})
 
 function showFormError(msg) {
   const el = $('form-error')

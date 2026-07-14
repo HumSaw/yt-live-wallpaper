@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Ничего внешнего: скрипты и стили только свои, картинки — свои и миниатюры с диска -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' file: data:"
+  />
   <title>YT Live Wallpaper</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -236,10 +241,16 @@
               <span id="ytdlp-status" class="ytdlp-status"></span>
             </div>
             <p class="hint" data-i18n="ytdlpHint">Если видео перестали скачиваться — YouTube изменился, обновление обычно чинит</p>
+            <p class="hint disk-usage"><span data-i18n="diskUsage">Скачанные видео занимают</span> <span id="disk-usage-value">0 МБ</span></p>
           </div>
         </div>
       </section>
     </main>
+
+    <div id="undo-toast" class="undo-toast hidden" role="status" aria-live="polite">
+      <span id="undo-toast-text"></span>
+      <button id="btn-undo" class="btn btn-small" type="button" data-i18n="undoAction">Вернуть</button>
+    </div>
 
     <footer class="footer">
       <p data-i18n="footerTray">Приложение живёт в трее: закрой окно — обои продолжат работать. Выход — через меню трея.</p>

@@ -72,6 +72,7 @@ if (!window.api) {
     ],
     platformSupported: true,
     setup: null, // поставь { label: 'Загрузчик видео (yt-dlp)', percent: 42, error: null } для проверки оверлея
+    diskUsage: 1476 * 1024 * 1024,
   }
   window.api = {
     getState: () => Promise.resolve(mockState),
@@ -79,6 +80,8 @@ if (!window.api) {
     addClip: () => Promise.resolve({ clip: {} }),
     addLocalFile: () => Promise.resolve({ clip: {} }),
     removeClip: () => Promise.resolve(true),
+    undoRemoveClip: () => Promise.resolve(true),
+    retryClip: () => Promise.resolve({ ok: true }),
     playClip: () => Promise.resolve(true),
     startWallpaper: () => Promise.resolve(true),
     stopWallpaper: () => Promise.resolve(true),

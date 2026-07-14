@@ -1,32 +1,26 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, powerMonitor } = require('electron')
+const { app, BrowserWindow, ipcMain, screen, powerMonitor } = require('electron')
 const path = require('path')
 const store = require('./store')
 const downloader = require('./downloader')
 const wallpaper = require('./wallpaper')
 const fullscreenMonitor = require('./fullscreen-monitor')
 const binManager = require('./bin-manager')
+const playlist = require('./playlist')
+const tray = require('./tray')
 
 const IS_WINDOWS = process.platform === 'win32'
+const UNDO_WINDOW_MS = 6000
 
 let controlWindow = null
 /** Окна-обои по id дисплея: Map<displayId, BrowserWindow> */
 const wallpaperWindows = new Map()
-let tray = null
-let playlistTimer = null
-let currentClipId = null
+let quitting = false
 let pausedByMonitor = false // пауза из-за полного экрана / перекрытого стола
 let pausedByBattery = false
 // Первичная установка yt-dlp/ffmpeg: null = всё готово
 let setupState = null
-
-function readyClips() {
-  return store.get().clips.filter((c) => c.status === 'ready')
-}
-
-function currentIndex(clips) {
-  const idx = clips.findIndex((c) => c.id === currentClipId)
-  return idx >= 0 ? idx : 0
-}
+// Отложенные удаления клипов (undo): Map<clipId, Timeout>
+const pendingRemovals = new Map()
 
 function wallpaperActive() {
   return wallpaperWindows.size > 0
@@ -64,7 +58,7 @@ function createControlWindow() {
   })
   // Закрытие окна не завершает приложение — оно живёт в трее
   controlWindow.on('close', (e) => {
-    if (!app.isQuiting) {
+    if (!quitting) {
       e.preventDefault()
       controlWindow.hide()
     }
@@ -107,7 +101,7 @@ function createWallpaperWindowForDisplay(display) {
     show: false,
     backgroundColor: '#000000',
     webPreferences: {
-      preload: path.join(__dirname, '..', 'preload.js'),
+      preload: path.join(__dirname, '..', 'preload-wallpaper.js'),
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false, // видео не должно замирать в фоне
@@ -148,25 +142,16 @@ function ensureWallpaperWindows() {
 }
 
 function destroyWallpaperWindows() {
-  stopPlaylistTimer()
+  playlist.stopTimer()
   eachWallpaperWindow((win) => win.destroy())
   wallpaperWindows.clear()
   pausedByMonitor = false
   if (IS_WINDOWS) wallpaper.refreshDesktop()
 }
 
-function playClipById(id) {
-  const clips = readyClips()
-  if (clips.length === 0) return
-  const clip = clips.find((c) => c.id === id) || clips[0]
-  currentClipId = clip.id
-
+function sendPlayToWallpapers(clip, loop) {
   const wins = ensureWallpaperWindows()
   const settings = store.get().settings
-  // В режиме «последовательность» клип не зацикливается сам — по окончании
-  // окно-обои шлёт wallpaper:ended и мы включаем следующий.
-  const loop = settings.playbackMode !== 'sequence' || clips.length <= 1
-
   for (const win of wins) {
     const send = () =>
       win.webContents.send('wallpaper:play', {
@@ -180,41 +165,20 @@ function playClipById(id) {
       send()
     }
   }
-
-  store.update((s) => {
-    s.settings.activeClipId = clip.id
-  })
   broadcastState()
-  schedulePlaylistTimer()
-}
-
-function playNextClip() {
-  const clips = readyClips()
-  if (clips.length === 0) return
-  const next = clips[(currentIndex(clips) + 1) % clips.length]
-  playClipById(next.id)
 }
 
 function startWallpaper() {
-  const clips = readyClips()
-  if (clips.length === 0) return false
-  playClipById(currentClipId || clips[0].id)
-  return true
+  const ok = playlist.start()
+  broadcastState()
+  tray.update()
+  return ok
 }
 
-function schedulePlaylistTimer() {
-  stopPlaylistTimer()
-  const s = store.get().settings
-  if (s.playbackMode === 'timer' && readyClips().length > 1) {
-    playlistTimer = setTimeout(() => playNextClip(), Math.max(10, s.playlistIntervalSec) * 1000)
-  }
-}
-
-function stopPlaylistTimer() {
-  if (playlistTimer) {
-    clearTimeout(playlistTimer)
-    playlistTimer = null
-  }
+function stopWallpaper() {
+  destroyWallpaperWindows()
+  broadcastState()
+  tray.update()
 }
 
 function applyPauseState() {
@@ -223,10 +187,10 @@ function applyPauseState() {
     win.webContents.send(shouldPause ? 'wallpaper:pause' : 'wallpaper:resume')
   )
   // На паузе клипы не должны сменяться по таймеру
-  if (shouldPause) stopPlaylistTimer()
-  else schedulePlaylistTimer()
+  if (shouldPause) playlist.stopTimer()
+  else playlist.scheduleTimer()
   broadcastState()
-  updateTrayMenu()
+  tray.update()
 }
 
 function getStateForRenderer() {
@@ -240,6 +204,7 @@ function getStateForRenderer() {
     displays: displaysForRenderer(),
     platformSupported: IS_WINDOWS,
     setup: setupState, // null = компоненты готовы, иначе { label, percent, error }
+    diskUsage: downloader.getDiskUsage(),
   }
 }
 
@@ -247,6 +212,17 @@ function broadcastState() {
   if (controlWindow && !controlWindow.isDestroyed()) {
     controlWindow.webContents.send('state:update', getStateForRenderer())
   }
+}
+
+// Прогресс загрузки прилетает от yt-dlp десятки раз в секунду.
+// Полный broadcast с пересборкой DOM — раз в 250 мс, не чаще.
+let progressBroadcastTimer = null
+function broadcastStateThrottled() {
+  if (progressBroadcastTimer) return
+  progressBroadcastTimer = setTimeout(() => {
+    progressBroadcastTimer = null
+    broadcastState()
+  }, 250)
 }
 
 function startClipDownload(clip) {
@@ -259,23 +235,32 @@ function startClipDownload(clip) {
   })
 
   downloader
-    .downloadClip(clip, (progress) => {
-      // Прогресс — то��ько в память и в UI, без записи на диск
+    .queueDownload(clip, (progress) => {
+      // Прогресс — только в память и в UI, без записи на диск
       store.updateClip(clip.id, { progress }, { persist: false })
-      broadcastState()
+      broadcastStateThrottled()
     })
     .then(async (filePath) => {
       const thumbPath = await downloader.makeThumbnail(filePath, clip.id)
       store.updateClip(clip.id, { status: 'ready', filePath, thumbPath, progress: 100 })
       broadcastState()
-      // Если обои е��ё не запущены — включаем сразу
+      // Если обои ещё не запущены — включаем сразу
       if (!wallpaperActive()) startWallpaper()
-      else schedulePlaylistTimer()
+      else playlist.scheduleTimer()
     })
     .catch((err) => {
       store.updateClip(clip.id, { status: 'error', error: String(err.message || err) })
       broadcastState()
     })
+}
+
+function finalizeClipRemoval(id) {
+  pendingRemovals.delete(id)
+  downloader.removeClipFile(store.get().clips.find((c) => c.id === id))
+  store.removeClip(id)
+  playlist.handleClipGone(id)
+  broadcastState()
+  tray.update()
 }
 
 // Первый запуск: докачиваем yt-dlp/ffmpeg, если их нет рядом с приложением
@@ -291,11 +276,42 @@ async function runFirstTimeSetup() {
 
   const result = await binManager.ensureBinaries(({ label, percent }) => {
     setupState = { label, percent, error: null }
-    broadcastState()
+    broadcastStateThrottled()
   })
 
   setupState = result.ok ? null : { label: '', percent: 0, error: result.error }
   broadcastState()
+}
+
+// Renderer не должен уметь записать в настройки произвольные ключи/значения
+const SETTING_VALIDATORS = {
+  volume: (v) => (typeof v === 'number' ? Math.min(1, Math.max(0, v)) : undefined),
+  muted: (v) => !!v,
+  playbackMode: (v) => (['single', 'sequence', 'timer'].includes(v) ? v : undefined),
+  playlistIntervalSec: (v) => {
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(86400, Math.max(10, Math.round(n))) : undefined
+  },
+  pauseOnFullscreen: (v) => !!v,
+  pauseWhenCovered: (v) => !!v,
+  pauseOnBattery: (v) => !!v,
+  targetDisplay: (v) => (typeof v === 'string' && v.length < 40 ? v : undefined),
+  autostart: (v) => !!v,
+  autoResume: (v) => !!v,
+  theme: (v) => (['night', 'day'].includes(v) ? v : undefined),
+  language: (v) =>
+    ['ru', 'en', 'es', 'pt', 'de', 'fr', 'ja', 'zh', 'ko', 'pl'].includes(v) ? v : undefined,
+}
+
+function sanitizeSettingsPatch(raw) {
+  const clean = {}
+  for (const [key, value] of Object.entries(raw || {})) {
+    const validate = SETTING_VALIDATORS[key]
+    if (!validate) continue
+    const v = validate(value)
+    if (v !== undefined) clean[key] = v
+  }
+  return clean
 }
 
 function registerIpc() {
@@ -341,91 +357,76 @@ function registerIpc() {
     })
 
     if (!wallpaperActive()) startWallpaper()
-    else schedulePlaylistTimer()
+    else playlist.scheduleTimer()
     return { clip }
   })
 
+  // Мягкое удаление: клип помечается и исчезает из ротации, файл удаляется
+  // через UNDO_WINDOW_MS — за это время пользователь может передумать.
   ipcMain.handle('clip:remove', (_e, id) => {
-    downloader.removeClipFile(store.get().clips.find((c) => c.id === id))
-    store.removeClip(id)
-    if (currentClipId === id) {
-      currentClipId = null
-      if (wallpaperActive()) {
-        // Активный клип удалили — переключаемся на следующий или гасим обои
-        if (readyClips().length > 0) startWallpaper()
-        else destroyWallpaperWindows()
-      }
-    }
+    const clip = store.get().clips.find((c) => c.id === id)
+    if (!clip || pendingRemovals.has(id)) return false
+
+    store.updateClip(id, { pendingRemoval: true }, { persist: false })
+    if (playlist.current() === id) playlist.handleClipGone(id)
+    pendingRemovals.set(id, setTimeout(() => finalizeClipRemoval(id), UNDO_WINDOW_MS))
     broadcastState()
-    updateTrayMenu()
+    tray.update()
     return true
+  })
+
+  ipcMain.handle('clip:removeUndo', (_e, id) => {
+    const timer = pendingRemovals.get(id)
+    if (!timer) return false
+    clearTimeout(timer)
+    pendingRemovals.delete(id)
+    store.updateClip(id, { pendingRemoval: false }, { persist: false })
+    broadcastState()
+    tray.update()
+    return true
+  })
+
+  // Повторная загрузка клипа после ошибки
+  ipcMain.handle('clip:retry', (_e, id) => {
+    if (setupState) return { error: 'Дождитесь установки компонентов' }
+    const clip = store.get().clips.find((c) => c.id === id)
+    if (!clip || clip.status !== 'error' || clip.source === 'local') return { error: 'Клип нельзя перезапустить' }
+
+    store.updateClip(id, { status: 'downloading', progress: 0, error: null })
+    broadcastState()
+    startClipDownload(store.get().clips.find((c) => c.id === id))
+    return { ok: true }
   })
 
   ipcMain.handle('clip:play', (_e, id) => {
-    playClipById(id)
-    updateTrayMenu()
+    playlist.playClipById(id)
+    broadcastState()
+    tray.update()
     return true
   })
 
-  ipcMain.handle('wallpaper:start', () => {
-    const ok = startWallpaper()
-    broadcastState()
-    updateTrayMenu()
-    return ok
-  })
+  ipcMain.handle('wallpaper:start', () => startWallpaper())
 
   ipcMain.handle('wallpaper:stop', () => {
-    destroyWallpaperWindows()
-    broadcastState()
-    updateTrayMenu()
+    stopWallpaper()
     return true
   })
 
   ipcMain.handle('wallpaper:next', () => {
-    playNextClip()
+    playlist.playNext()
+    broadcastState()
     return true
   })
 
-  ipcMain.handle('ytdlp:update', async () => {
-    const result = await downloader.updateYtDlp()
-    return result
-  })
+  ipcMain.handle('ytdlp:update', () => binManager.updateYtDlp())
 
   // Видео закончилось (режим «последовательность») — включаем следующее
   ipcMain.on('wallpaper:ended', () => {
-    if (store.get().settings.playbackMode === 'sequence') playNextClip()
-  })
-
-  // Renderer не должен уметь записать в настройки произв��льные ключи/значения
-  const SETTING_VALIDATORS = {
-    volume: (v) => (typeof v === 'number' ? Math.min(1, Math.max(0, v)) : undefined),
-    muted: (v) => !!v,
-    playbackMode: (v) => (['single', 'sequence', 'timer'].includes(v) ? v : undefined),
-    playlistIntervalSec: (v) => {
-      const n = Number(v)
-      return Number.isFinite(n) ? Math.min(86400, Math.max(10, Math.round(n))) : undefined
-    },
-    pauseOnFullscreen: (v) => !!v,
-    pauseWhenCovered: (v) => !!v,
-    pauseOnBattery: (v) => !!v,
-    targetDisplay: (v) => (typeof v === 'string' && v.length < 40 ? v : undefined),
-    autostart: (v) => !!v,
-    autoResume: (v) => !!v,
-    theme: (v) => (['night', 'day'].includes(v) ? v : undefined),
-    language: (v) =>
-      ['ru', 'en', 'es', 'pt', 'de', 'fr', 'ja', 'zh', 'ko', 'pl'].includes(v) ? v : undefined,
-  }
-
-  function sanitizeSettingsPatch(raw) {
-    const clean = {}
-    for (const [key, value] of Object.entries(raw || {})) {
-      const validate = SETTING_VALIDATORS[key]
-      if (!validate) continue
-      const v = validate(value)
-      if (v !== undefined) clean[key] = v
+    if (store.get().settings.playbackMode === 'sequence') {
+      playlist.playNext()
+      broadcastState()
     }
-    return clean
-  }
+  })
 
   ipcMain.handle('settings:set', (_e, rawPatch) => {
     const patch = sanitizeSettingsPatch(rawPatch)
@@ -442,15 +443,15 @@ function registerIpc() {
     }
     if ('playbackMode' in patch) {
       // Перезапускаем текущий клип, чтобы применить loop-режим
-      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
-      else schedulePlaylistTimer()
+      if (wallpaperActive() && playlist.current()) playlist.playClipById(playlist.current())
+      else playlist.scheduleTimer()
     } else if ('playlistIntervalSec' in patch) {
       // Смена интервала не требует перезапуска видео
-      schedulePlaylistTimer()
+      playlist.scheduleTimer()
     }
     if ('targetDisplay' in patch) {
       // Пересоздаём окна под новый набор мониторов
-      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
+      if (wallpaperActive() && playlist.current()) playlist.playClipById(playlist.current())
     }
     if ('pauseOnFullscreen' in patch || 'pauseWhenCovered' in patch) {
       syncMonitorState()
@@ -460,7 +461,7 @@ function registerIpc() {
       applyPauseState()
     }
     broadcastState()
-    updateTrayMenu()
+    tray.update()
     return s
   })
 }
@@ -513,53 +514,20 @@ function setupPowerMonitor() {
   })
 }
 
-function updateTrayMenu() {
-  if (!tray) return
-  const active = wallpaperActive()
-  const s = store.get().settings
-  const menu = Menu.buildFromTemplate([
-    { label: 'Открыть панель', click: () => createControlWindow() },
-    { type: 'separator' },
-    active
-      ? { label: 'Остановить обои', click: () => { destroyWallpaperWindows(); broadcastState(); updateTrayMenu() } }
-      : {
-          label: 'Запустить обои',
-          enabled: readyClips().length > 0,
-          click: () => { startWallpaper(); broadcastState(); updateTrayMenu() },
-        },
-    { label: 'Следующий клип', enabled: active && readyClips().length > 1, click: () => playNextClip() },
-    {
-      label: s.muted ? 'Включить звук' : 'Выключить звук',
-      enabled: active,
-      click: () => {
-        store.update((st) => { st.settings.muted = !st.settings.muted })
-        const st = store.get().settings
-        eachWallpaperWindow((win) =>
-          win.webContents.send('wallpaper:volume', st.muted ? 0 : st.volume)
-        )
-        broadcastState()
-        updateTrayMenu()
-      },
-    },
-    { type: 'separator' },
-    {
-      label: 'Выход',
-      click: () => {
-        app.isQuiting = true
-        destroyWallpaperWindows()
-        app.quit()
-      },
-    },
-  ])
-  tray.setContextMenu(menu)
+function toggleMute() {
+  store.update((st) => {
+    st.settings.muted = !st.settings.muted
+  })
+  const st = store.get().settings
+  eachWallpaperWindow((win) => win.webContents.send('wallpaper:volume', st.muted ? 0 : st.volume))
+  broadcastState()
+  tray.update()
 }
 
-function createTray() {
-  const icon = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'tray.png'))
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 16, height: 16 }))
-  tray.setToolTip('YT Live Wallpaper')
-  updateTrayMenu()
-  tray.on('double-click', () => createControlWindow())
+function quit() {
+  quitting = true
+  destroyWallpaperWindows()
+  app.quit()
 }
 
 const gotLock = app.requestSingleInstanceLock()
@@ -572,8 +540,22 @@ if (!gotLock) {
     store.init(app.getPath('userData'))
     downloader.init(app.getPath('userData'))
     binManager.init(app.getPath('userData'))
+
+    playlist.init({
+      sendPlay: sendPlayToWallpapers,
+      wallpaperActive,
+      onStopped: () => stopWallpaper(),
+    })
+    tray.init({
+      wallpaperActive,
+      startWallpaper,
+      stopWallpaper,
+      toggleMute,
+      openPanel: createControlWindow,
+      quit,
+    })
+
     registerIpc()
-    createTray()
     setupPowerMonitor()
 
     // Не блокируем запуск: окно откроется сразу, прогресс уйдёт в UI
@@ -592,21 +574,20 @@ if (!gotLock) {
     }
 
     // Автовозобновление обоев при старте
-    if (settings.autoResume && readyClips().length > 0) {
-      currentClipId = settings.activeClipId
+    if (settings.autoResume && playlist.readyClips().length > 0) {
+      playlist.setCurrent(settings.activeClipId)
       startWallpaper()
       if (pausedByBattery) applyPauseState()
     }
 
-    // Подключили/отключили монитор — пересобираем окна
-    screen.on('display-added', () => {
-      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
+    const rebuildWindows = () => {
+      if (wallpaperActive() && playlist.current()) playlist.playClipById(playlist.current())
       broadcastState()
-    })
-    screen.on('display-removed', () => {
-      if (wallpaperActive() && currentClipId) playClipById(currentClipId)
-      broadcastState()
-    })
+    }
+    // Подключили/отключили монитор или сменили DPI/разрешение — пересобираем окна
+    screen.on('display-added', rebuildWindows)
+    screen.on('display-removed', rebuildWindows)
+    screen.on('display-metrics-changed', rebuildWindows)
   })
 
   app.on('window-all-closed', () => {
@@ -614,9 +595,14 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => {
-    app.isQuiting = true
+    quitting = true
+    // Отложенные удаления выполняем немедленно, иначе файлы останутся навсегда
+    for (const id of [...pendingRemovals.keys()]) {
+      clearTimeout(pendingRemovals.get(id))
+      finalizeClipRemoval(id)
+    }
     fullscreenMonitor.stop()
-    stopPlaylistTimer()
+    playlist.stopTimer()
     store.saveNow() // сбрасываем дебаунс-очередь на диск
   })
 }

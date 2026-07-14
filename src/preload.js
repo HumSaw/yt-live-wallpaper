@@ -1,6 +1,8 @@
+// Preload окна управления. Окно-обои получает свой, урезанный preload
+// (preload-wallpaper.js) — оно не должно уметь удалять клипы или менять настройки.
+
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
-// API для окна управления
 contextBridge.exposeInMainWorld('api', {
   getState: () => ipcRenderer.invoke('state:get'),
   addClip: (data) => ipcRenderer.invoke('clip:add', data),
@@ -15,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('clip:addLocal', filePath)
   },
   removeClip: (id) => ipcRenderer.invoke('clip:remove', id),
+  undoRemoveClip: (id) => ipcRenderer.invoke('clip:removeUndo', id),
+  retryClip: (id) => ipcRenderer.invoke('clip:retry', id),
   playClip: (id) => ipcRenderer.invoke('clip:play', id),
   startWallpaper: () => ipcRenderer.invoke('wallpaper:start'),
   stopWallpaper: () => ipcRenderer.invoke('wallpaper:stop'),
@@ -27,13 +31,4 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('state:update', listener)
     return () => ipcRenderer.removeListener('state:update', listener)
   },
-})
-
-// API для окна-обоев
-contextBridge.exposeInMainWorld('wallpaperApi', {
-  onPlay: (cb) => ipcRenderer.on('wallpaper:play', (_e, data) => cb(data)),
-  onPause: (cb) => ipcRenderer.on('wallpaper:pause', () => cb()),
-  onResume: (cb) => ipcRenderer.on('wallpaper:resume', () => cb()),
-  onVolume: (cb) => ipcRenderer.on('wallpaper:volume', (_e, v) => cb(v)),
-  notifyEnded: () => ipcRenderer.send('wallpaper:ended'),
 })

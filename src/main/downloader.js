@@ -211,41 +211,75 @@ function downloadClip(clip, onProgress) {
       if (code === 0 && fs.existsSync(outFile)) {
         resolve(outFile)
       } else {
+        cleanupPartFiles(clip.id)
         reject(new Error(humanizeError(stderr, code)))
       }
     })
   })
 }
 
-/** Обновляет yt-dlp до последней версии (yt-dlp -U). */
-function updateYtDlp() {
-  return new Promise((resolve) => {
-    const proc = spawn(binPath('yt-dlp'), ['-U'], { windowsHide: true })
-    let out = ''
-    proc.stdout.on('data', (d) => (out += d.toString()))
-    proc.stderr.on('data', (d) => (out += d.toString()))
-    proc.on('error', (err) => {
-      resolve({
-        ok: false,
-        message:
-          err.code === 'ENOENT'
-            ? 'yt-dlp не найден — перезапустите приложение'
-            : String(err.message || err),
-      })
-    })
-    proc.on('close', (code) => {
-      const text = out.trim()
-      if (code === 0) {
-        const upToDate = /is up to date/i.test(text)
-        resolve({
-          ok: true,
-          message: upToDate ? 'yt-dlp уже последней версии' : 'yt-dlp обновлён до последней версии',
-        })
-      } else {
-        resolve({ ok: false, message: 'Не удалось обновить: ' + text.split('\n').slice(-1)[0] })
-      }
-    })
+// Очередь загрузок: не больше двух yt-dlp одновременно, чтобы 10 вставленных
+// ссылок не породили 10 процессов и не забили канал.
+const MAX_CONCURRENT_DOWNLOADS = 2
+let activeDownloads = 0
+const downloadQueue = []
+
+function queueDownload(clip, onProgress) {
+  return new Promise((resolve, reject) => {
+    downloadQueue.push({ clip, onProgress, resolve, reject })
+    drainQueue()
   })
+}
+
+function drainQueue() {
+  while (activeDownloads < MAX_CONCURRENT_DOWNLOADS && downloadQueue.length > 0) {
+    const job = downloadQueue.shift()
+    activeDownloads++
+    downloadClip(job.clip, job.onProgress)
+      .then(job.resolve, job.reject)
+      .finally(() => {
+        activeDownloads--
+        drainQueue()
+      })
+  }
+}
+
+/** Сколько байт занимают скачанные видео (для индикатора в настройках). */
+function getDiskUsage() {
+  if (!videosDir) return 0
+  let total = 0
+  try {
+    for (const name of fs.readdirSync(videosDir)) {
+      try {
+        total += fs.statSync(path.join(videosDir, name)).size
+      } catch (_) {
+        /* файл исчез между readdir и stat */
+      }
+    }
+  } catch (_) {
+    return 0
+  }
+  return total
+}
+
+/** Убирает недокачанные .part/.ytdl файлы клипа после неудачной загрузки. */
+function cleanupPartFiles(clipId) {
+  if (!videosDir) return
+  let entries
+  try {
+    entries = fs.readdirSync(videosDir)
+  } catch (_) {
+    return
+  }
+  for (const name of entries) {
+    if (name.startsWith(`${clipId}.`) && (name.endsWith('.part') || name.endsWith('.ytdl'))) {
+      try {
+        fs.unlinkSync(path.join(videosDir, name))
+      } catch (_) {
+        /* файл ещё занят — удалится при следующей попытке */
+      }
+    }
+  }
 }
 
 function removeClipFile(clip) {
@@ -276,11 +310,13 @@ function removeClipFile(clip) {
 module.exports = {
   init,
   downloadClip,
+  queueDownload,
+  getDiskUsage,
   removeClipFile,
   parseTime,
   validateUrl,
   validateLocalFile,
   fetchTitle,
   makeThumbnail,
-  updateYtDlp,
+  humanizeError,
 }
