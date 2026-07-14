@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru" class="bg">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Ничего внешнего: скрипты и стили только свои, картинки — свои и миниатюры с диска -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' file: data:"
+  />
+  <title>YT Live Wallpaper</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+
+  <div id="setup-overlay" class="setup-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+    <div class="setup-box">
+      <p class="setup-kana" aria-hidden="true">準備中</p>
+      <h2 id="setup-title" data-i18n="setupTitle">Первый запуск</h2>
+      <p class="setup-sub" data-i18n="setupSub">Докачиваю компоненты для работы с видео — это один раз и займёт около минуты</p>
+      <div class="setup-progress">
+        <div class="progress setup-bar"><div id="setup-fill" class="progress-fill"></div></div>
+        <p id="setup-label" class="setup-label">Подготовка…</p>
+      </div>
+      <div id="setup-error-box" class="hidden">
+        <p id="setup-error" class="form-error"></p>
+        <button id="btn-setup-retry" class="btn btn-primary" type="button" data-i18n="retryBtn">Попробовать ещё раз</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="hero">
+      <img class="hero-art hero-art-night" src="../../assets/header-art.png" alt="" aria-hidden="true" />
+      <img class="hero-art hero-art-day" src="../../assets/header-art-day.png" alt="" aria-hidden="true" />
+      <canvas id="hero-fx" class="hero-fx" aria-hidden="true"></canvas>
+      <div class="hero-overlay"></div>
+      <div class="hero-scanlines" aria-hidden="true"></div>
+
+      <div class="hero-controls">
+        <select id="lang-select" class="lang-select" data-i18n-aria="langLabel" aria-label="Язык интерфейса"></select>
+        <button id="btn-theme" class="theme-toggle" type="button">
+          <span class="theme-toggle-icon" aria-hidden="true"></span>
+          <span id="theme-toggle-label">День</span>
+        </button>
+      </div>
+
+      <span class="hero-kana hero-kana-left" aria-hidden="true">ライブ壁紙</span>
+      <span class="hero-kana hero-kana-right" aria-hidden="true">デスクトップ</span>
+
+      <div class="hero-content">
+        <div class="brand">
+          <p class="brand-tag">youtube → desktop</p>
+          <h1 class="glitch" data-text="YT LIVE WALLPAPER">YT LIVE WALLPAPER</h1>
+          <p class="subtitle" data-i18n="subtitle">Любое видео с YouTube — живые 4K-обои твоего рабочего стола</p>
+        </div>
+        <div class="hero-actions">
+          <span id="status-badge" class="badge badge-off">
+            <span class="badge-dot" aria-hidden="true"></span>
+            <span id="status-text">Обои выключены</span>
+          </span>
+          <button id="btn-toggle-wallpaper" class="btn btn-primary btn-lg">Запустить обои</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="platform-warning" class="warning hidden" role="alert" data-i18n="platformWarning">
+      Вы запустили приложение не на Windows — панель работает, но обои на рабочий стол
+      ставятся только в Windows.
+    </div>
+
+    <main class="main">
+      <section class="card card-glow" aria-labelledby="step1-title">
+        <span class="card-kana" aria-hidden="true">追加</span>
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">01</span>
+          <div>
+            <h2 id="step1-title" data-i18n="s1Title">Добавь видео</h2>
+            <p class="card-sub" data-i18n="s1Sub">Вставь ссылку — приложение само скачает видео в максимальном качестве до 4K</p>
+          </div>
+        </div>
+
+        <form id="add-form" class="add-form">
+          <div class="url-row">
+            <div class="field field-url">
+              <label for="url" data-i18n="urlLabel">Ссылка на YouTube</label>
+              <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required />
+            </div>
+            <button type="submit" class="btn btn-primary btn-add"><span data-i18n="btnDownload">Скачать</span><span class="btn-kana" aria-hidden="true">ダウンロード</span></button>
+          </div>
+
+          <div class="range-row">
+            <fieldset class="segment" data-i18n-aria="rangeLegend" aria-label="Что скачать">
+              <legend class="sr-only" data-i18n="rangeLegend">Что скачать</legend>
+              <label class="segment-option">
+                <input type="radio" name="range-mode" value="full" checked />
+                <span data-i18n="modeFull">Всё видео целиком</span>
+              </label>
+              <label class="segment-option">
+                <input type="radio" name="range-mode" value="clip" />
+                <span data-i18n="modeClip">Только отрезок</span>
+              </label>
+            </fieldset>
+
+            <div id="timecodes" class="timecodes hidden">
+              <div class="field">
+                <label for="start" data-i18n="startLabel">Начало</label>
+                <input id="start" type="text" placeholder="1:20" inputmode="numeric" />
+              </div>
+              <span class="timecode-dash" aria-hidden="true">→</span>
+              <div class="field">
+                <label for="end" data-i18n="endLabel">Конец</label>
+                <input id="end" type="text" placeholder="1:50" inputmode="numeric" />
+              </div>
+            </div>
+          </div>
+          <p id="timecode-hint" class="hint hidden" data-i18n="tcHint">Формат «мм:сс» или «чч:мм:сс». Пустое поле = от начала / до конца.</p>
+
+          <p id="form-error" class="form-error hidden" role="alert"></p>
+        </form>
+
+        <div id="drop-zone" class="drop-zone">
+          <span class="drop-icon" aria-hidden="true">⤓</span>
+          <span data-i18n="dropZone">Или перетащи сюда свой видеофайл — mp4, webm, mkv, mov</span>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="step2-title">
+        <span class="card-kana" aria-hidden="true">再生</span>
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">02</span>
+          <div>
+            <h2 id="step2-title" data-i18n="s2Title">Плейлист</h2>
+            <p class="card-sub" data-i18n="s2Sub">Все скачанные видео крутятся циклично — по одному или друг за другом</p>
+          </div>
+        </div>
+        <ul id="clip-list" class="clip-list"></ul>
+        <p id="empty-hint" class="empty-hint" data-i18n="emptyHint">
+          Пока пусто. Вставь ссылку выше — и через минуту у тебя будут живые обои.
+        </p>
+      </section>
+
+      <section class="card" aria-labelledby="step3-title">
+        <span class="card-kana" aria-hidden="true">ループ</span>
+        <div class="card-head">
+          <span class="step-num" aria-hidden="true">03</span>
+          <div>
+            <h2 id="step3-title" data-i18n="s3Title">Режим воспроизведения</h2>
+            <p class="card-sub" data-i18n="s3Sub">Как крутить видео на рабочем столе</p>
+          </div>
+        </div>
+
+        <div class="mode-grid" role="radiogroup" data-i18n-aria="s3Title" aria-label="Режим воспроизведения">
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="single" />
+            <span class="mode-icon" aria-hidden="true">◉</span>
+            <span class="mode-title" data-i18n="mSingle">Один клип</span>
+            <span class="mode-desc" data-i18n="mSingleD">Выбранное видео крутится по кругу бесконечно</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="sequence" />
+            <span class="mode-icon" aria-hidden="true">⇄</span>
+            <span class="mode-title" data-i18n="mSequence">Друг за другом</span>
+            <span class="mode-desc" data-i18n="mSequenceD">Видео доигрывает до конца — включается следующее, и так по кругу</span>
+          </label>
+          <label class="mode-card">
+            <input type="radio" name="playback-mode" value="timer" />
+            <span class="mode-icon" aria-hidden="true">◷</span>
+            <span class="mode-title" data-i18n="mTimer">По таймеру</span>
+            <span class="mode-desc" data-i18n="mTimerD">Клип сменяется каждые N секунд, не дожидаясь конца</span>
+          </label>
+        </div>
+
+        <div id="interval-row" class="interval-row hidden">
+          <label for="interval" data-i18n="intervalLabel">Интервал смены (сек)</label>
+          <input id="interval" type="number" min="10" step="10" class="input-number" />
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="settings-title">
+        <span class="card-kana" aria-hidden="true">設定</span>
+        <div class="card-head">
+          <span class="step-num step-num-dim" aria-hidden="true">⚙</span>
+          <div>
+            <h2 id="settings-title" data-i18n="setTitle">Настройки</h2>
+            <p class="card-sub" data-i18n="setSub">Звук и поведение приложения</p>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <div class="setting">
+            <label for="volume" data-i18n="volume">Громкость обоев</label>
+            <div class="volume-row">
+              <input id="volume" type="range" min="0" max="100" step="1" />
+              <span id="volume-label" class="volume-label">30%</span>
+              <button id="btn-mute" type="button" class="btn btn-ghost btn-small">Выкл. звук</button>
+            </div>
+          </div>
+
+          <div class="setting">
+            <label for="display-select" data-i18n="display">Монитор для обоев</label>
+            <select id="display-select" class="select"></select>
+          </div>
+
+          <div class="toggles">
+            <label class="setting-toggle">
+              <input id="pause-fullscreen" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+              <span><span data-i18n="pFs">Пауза при играх и полноэкранных приложениях</span> <em data-i18n="pFsEm">экономит видеокарту</em></span>
+            </label>
+
+            <label class="setting-toggle">
+              <input id="pause-covered" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+              <span><span data-i18n="pCov">Пауза, когда окно развёрнуто и рабочий стол не виден</span> <em data-i18n="pCovEm">максимальная экономия</em></span>
+            </label>
+
+            <label class="setting-toggle">
+              <input id="pause-battery" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+              <span><span data-i18n="pBat">Пауза при работе от батареи</span> <em data-i18n="pBatEm">для ноутбуков</em></span>
+            </label>
+
+            <label class="setting-toggle">
+              <input id="autostart" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+              <span data-i18n="autostart">Запускать вместе с Windows</span>
+            </label>
+
+            <label class="setting-toggle">
+              <input id="auto-resume" type="checkbox" />
+              <span class="switch" aria-hidden="true"></span>
+              <span data-i18n="autoResume">Включать обои сразу при запуске приложения</span>
+            </label>
+          </div>
+
+          <div class="setting setting-ytdlp">
+            <div class="ytdlp-row">
+              <button id="btn-update-ytdlp" type="button" class="btn btn-ghost btn-small" data-i18n="updYtdlp">Обновить yt-dlp</button>
+              <span id="ytdlp-status" class="ytdlp-status"></span>
+            </div>
+            <p class="hint" data-i18n="ytdlpHint">Если видео перестали скачиваться — YouTube изменился, обновление обычно чинит</p>
+            <p class="hint disk-usage"><span data-i18n="diskUsage">Скачанные видео занимают</span> <span id="disk-usage-value">0 МБ</span></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="undo-toast" class="undo-toast hidden" role="status" aria-live="polite">
+      <span id="undo-toast-text"></span>
+      <button id="btn-undo" class="btn btn-small" type="button" data-i18n="undoAction">Вернуть</button>
+    </div>
+
+    <footer class="footer">
+      <p data-i18n="footerTray">Приложение живёт в трее: закрой окно — обои продолжат работать. Выход — через меню трея.</p>
+      <p class="footer-kana" aria-hidden="true">よい一日を</p>
+    </footer>
+  </div>
+
+  <script src="dev-mock.js"></script>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+  <script src="hero-fx.js"></script>
+</body>
+</html>

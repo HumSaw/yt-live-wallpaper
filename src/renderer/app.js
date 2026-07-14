@@ -1,0 +1,434 @@
+// Панель управления. Всё общение с main-процессом идёт через window.api (см. preload.js).
+
+let state = null
+
+const $ = (id) => document.getElementById(id)
+const t = (key) => window.I18N.t(key)
+
+function initLangSelect() {
+  const select = $('lang-select')
+  for (const { code, name } of window.I18N.LANGUAGES) {
+    const opt = document.createElement('option')
+    opt.value = code
+    opt.textContent = name
+    select.appendChild(opt)
+  }
+  select.addEventListener('change', (e) => {
+    const lang = e.target.value
+    if (state) state.settings.language = lang
+    window.I18N.setLang(lang)
+    render()
+    window.api.setSettings({ language: lang })
+  })
+}
+
+function applyLanguage() {
+  // язык из настроек; при первом запуске — язык системы
+  const lang = state?.settings?.language || window.I18N.detect()
+  if (window.I18N.lang !== lang) window.I18N.setLang(lang)
+  $('lang-select').value = lang
+}
+
+function applyTheme() {
+  const theme = state?.settings?.theme || 'night'
+  document.documentElement.dataset.theme = theme
+  $('theme-toggle-label').textContent = theme === 'day' ? t('themeNight') : t('themeDay')
+}
+
+function renderSetup() {
+  const overlay = $('setup-overlay')
+  const setup = state.setup
+  overlay.classList.toggle('hidden', !setup)
+  if (!setup) return
+
+  const hasError = !!setup.error
+  $('setup-error-box').classList.toggle('hidden', !hasError)
+  $('setup-error').textContent = setup.error || ''
+  $('setup-label').textContent = hasError ? '' : setup.label || t('preparing')
+  $('setup-fill').style.width = `${setup.percent || 0}%`
+}
+
+function render() {
+  if (!state) return
+
+  applyLanguage()
+  applyTheme()
+  renderSetup()
+
+  const badge = $('status-badge')
+  const statusText = $('status-text')
+  const toggleBtn = $('btn-toggle-wallpaper')
+
+  if (state.wallpaperActive && state.pausedByBattery) {
+    statusText.textContent = t('statusPauseBat')
+    badge.className = 'badge badge-paused'
+  } else if (state.wallpaperActive && state.pausedByFullscreen) {
+    statusText.textContent = t('statusPauseFs')
+    badge.className = 'badge badge-paused'
+  } else if (state.wallpaperActive) {
+    statusText.textContent = t('statusOn')
+    badge.className = 'badge badge-on'
+  } else {
+    statusText.textContent = t('statusOff')
+    badge.className = 'badge badge-off'
+  }
+  toggleBtn.textContent = state.wallpaperActive ? t('btnStop') : t('btnStart')
+
+  $('platform-warning').classList.toggle('hidden', state.platformSupported)
+
+  renderClips()
+  renderDisplays()
+
+  const s = state.settings
+  for (const radio of document.querySelectorAll('input[name="playback-mode"]')) {
+    radio.checked = radio.value === s.playbackMode
+  }
+  $('interval-row').classList.toggle('hidden', s.playbackMode !== 'timer')
+  $('interval').value = s.playlistIntervalSec
+
+  $('volume').value = Math.round(s.volume * 100)
+  $('volume-label').textContent = s.muted ? t('mutedLabel') : `${Math.round(s.volume * 100)}%`
+  $('btn-mute').textContent = s.muted ? t('muteOn') : t('muteOff')
+  $('pause-fullscreen').checked = s.pauseOnFullscreen
+  $('pause-covered').checked = !!s.pauseWhenCovered
+  $('pause-battery').checked = !!s.pauseOnBattery
+  $('autostart').checked = s.autostart
+  $('auto-resume').checked = s.autoResume
+  $('disk-usage-value').textContent = formatBytes(state.diskUsage)
+}
+
+function renderDisplays() {
+  const select = $('display-select')
+  const displays = state.displays || []
+  const s = state.settings
+  select.innerHTML = ''
+
+  const optPrimary = document.createElement('option')
+  optPrimary.value = 'primary'
+  optPrimary.textContent = t('dispPrimary')
+  select.appendChild(optPrimary)
+
+  if (displays.length > 1) {
+    const optAll = document.createElement('option')
+    optAll.value = 'all'
+    optAll.textContent = t('dispAll')
+    select.appendChild(optAll)
+
+    for (const d of displays) {
+      const opt = document.createElement('option')
+      opt.value = d.id
+      opt.textContent = d.label
+      select.appendChild(opt)
+    }
+  }
+
+  select.value = ['primary', 'all'].includes(s.targetDisplay)
+    ? s.targetDisplay
+    : displays.some((d) => d.id === String(s.targetDisplay))
+      ? String(s.targetDisplay)
+      : 'primary'
+  select.disabled = displays.length <= 1
+}
+
+/**
+ * Windows-путь -> корректный file:// URL. Простая конкатенация ломается
+ * на # и ? в именах папок. Буква диска не кодируется.
+ */
+function fileUrl(p) {
+  const segments = String(p)
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((seg, i) => (i === 0 && /^[A-Za-z]:$/.test(seg) ? seg : encodeURIComponent(seg)))
+  return 'file:///' + segments.join('/')
+}
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 MB'
+  const mb = bytes / (1024 * 1024)
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`
+  return `${Math.round(mb)} MB`
+}
+
+function renderClips() {
+  const list = $('clip-list')
+  list.innerHTML = ''
+  // Клипы, ждущие удаления (окно undo), в списке не показываем
+  const clips = state.clips.filter((c) => !c.pendingRemoval)
+  $('empty-hint').classList.toggle('hidden', clips.length > 0)
+
+  clips.forEach((clip, i) => {
+    const isActive = clip.id === state.settings.activeClipId && state.wallpaperActive
+    const li = document.createElement('li')
+    li.className = 'clip' + (isActive ? ' active' : '')
+
+    const order = document.createElement('span')
+    order.className = 'clip-order'
+    order.textContent = String(i + 1).padStart(2, '0')
+    li.appendChild(order)
+
+    const thumbWrap = document.createElement('div')
+    thumbWrap.className = 'clip-thumb'
+    if (clip.thumbPath) {
+      const img = document.createElement('img')
+      img.src = fileUrl(clip.thumbPath)
+      img.alt = ''
+      thumbWrap.appendChild(img)
+    } else {
+      thumbWrap.classList.add('clip-thumb-empty')
+      thumbWrap.textContent = clip.status === 'downloading' ? '…' : '▶'
+    }
+    li.appendChild(thumbWrap)
+
+    const info = document.createElement('div')
+    info.className = 'clip-info'
+
+    if (isActive) {
+      const now = document.createElement('div')
+      now.className = 'clip-now'
+      now.textContent = t('nowOnDesktop')
+      info.appendChild(now)
+    }
+
+    const title = document.createElement('div')
+    title.className = 'clip-title'
+    title.textContent = clip.title || clip.url
+    info.appendChild(title)
+
+    const meta = document.createElement('div')
+    meta.className = 'clip-meta'
+    const sourceLabel = clip.source === 'local' ? t('localFile') : null
+    const range =
+      clip.start || clip.end
+        ? `${t('rangeWord')} ${clip.start || '0:00'} – ${clip.end || t('toEnd')}`
+        : t('fullVideo')
+    const metaParts = [sourceLabel, range].filter(Boolean).join(' · ')
+
+    if (clip.status === 'downloading') {
+      meta.textContent = `${t('stDownloading')} ${Math.round(clip.progress || 0)}% · ${metaParts}`
+      const bar = document.createElement('div')
+      bar.className = 'progress'
+      const fill = document.createElement('div')
+      fill.className = 'progress-fill'
+      fill.style.width = `${clip.progress || 0}%`
+      bar.appendChild(fill)
+      info.appendChild(meta)
+      info.appendChild(bar)
+    } else if (clip.status === 'error') {
+      meta.textContent = `${t('stError')}: ${clip.error}`
+      meta.className = 'clip-meta error'
+      info.appendChild(meta)
+    } else {
+      meta.textContent = `${t('stReady')} · ${metaParts}`
+      info.appendChild(meta)
+    }
+
+    const actions = document.createElement('div')
+    actions.className = 'clip-actions'
+
+    if (clip.status === 'ready' && !isActive) {
+      const playBtn = document.createElement('button')
+      playBtn.className = 'btn btn-small'
+      playBtn.textContent = t('btnSet')
+      playBtn.addEventListener('click', () => window.api.playClip(clip.id))
+      actions.appendChild(playBtn)
+    }
+
+    if (clip.status === 'error' && clip.source !== 'local') {
+      const retryBtn = document.createElement('button')
+      retryBtn.className = 'btn btn-small'
+      retryBtn.textContent = t('btnRetry')
+      retryBtn.addEventListener('click', () => window.api.retryClip(clip.id))
+      actions.appendChild(retryBtn)
+    }
+
+    const removeBtn = document.createElement('button')
+    removeBtn.className = 'btn btn-small btn-ghost btn-danger'
+    removeBtn.textContent = t('btnRemove')
+    removeBtn.addEventListener('click', () => removeClipWithUndo(clip.id))
+    actions.appendChild(removeBtn)
+
+    li.appendChild(info)
+    li.appendChild(actions)
+    list.appendChild(li)
+  })
+}
+
+// Удаление с возможностью отмены: main держит файл ещё 6 секунд
+let undoClipId = null
+let undoToastTimer = null
+
+function removeClipWithUndo(id) {
+  window.api.removeClip(id)
+  undoClipId = id
+  const toast = $('undo-toast')
+  $('undo-toast-text').textContent = t('undoDeleted')
+  toast.classList.remove('hidden')
+  clearTimeout(undoToastTimer)
+  undoToastTimer = setTimeout(() => {
+    toast.classList.add('hidden')
+    undoClipId = null
+  }, 5500)
+}
+
+$('btn-undo').addEventListener('click', async () => {
+  if (!undoClipId) return
+  await window.api.undoRemoveClip(undoClipId)
+  undoClipId = null
+  clearTimeout(undoToastTimer)
+  $('undo-toast').classList.add('hidden')
+})
+
+function showFormError(msg) {
+  const el = $('form-error')
+  el.textContent = msg || ''
+  el.classList.toggle('hidden', !msg)
+}
+
+// переключатель «всё видео / отрезок»
+for (const radio of document.querySelectorAll('input[name="range-mode"]')) {
+  radio.addEventListener('change', () => {
+    const isClip = document.querySelector('input[name="range-mode"]:checked').value === 'clip'
+    $('timecodes').classList.toggle('hidden', !isClip)
+    $('timecode-hint').classList.toggle('hidden', !isClip)
+    if (!isClip) {
+      $('start').value = ''
+      $('end').value = ''
+    }
+  })
+}
+
+$('add-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  showFormError(null)
+  const url = $('url').value.trim()
+  if (!url) return
+
+  const isClip = document.querySelector('input[name="range-mode"]:checked').value === 'clip'
+  const result = await window.api.addClip({
+    url,
+    start: isClip ? $('start').value.trim() : '',
+    end: isClip ? $('end').value.trim() : '',
+  })
+
+  if (result && result.error) {
+    showFormError(result.error)
+    return
+  }
+  $('url').value = ''
+  $('start').value = ''
+  $('end').value = ''
+})
+
+// drag&drop своих видеофайлов
+const dropZone = $('drop-zone')
+
+for (const evt of ['dragenter', 'dragover']) {
+  document.addEventListener(evt, (e) => {
+    e.preventDefault()
+    dropZone.classList.add('drag-over')
+  })
+}
+for (const evt of ['dragleave', 'drop']) {
+  document.addEventListener(evt, (e) => {
+    e.preventDefault()
+    if (evt === 'dragleave' && e.relatedTarget) return
+    dropZone.classList.remove('drag-over')
+  })
+}
+document.addEventListener('drop', async (e) => {
+  e.preventDefault()
+  showFormError(null)
+  const files = Array.from(e.dataTransfer?.files || [])
+  if (files.length === 0) return
+  for (const file of files) {
+    const result = await window.api.addLocalFile(file)
+    if (result && result.error) showFormError(result.error)
+  }
+})
+
+$('btn-toggle-wallpaper').addEventListener('click', async () => {
+  if (state.wallpaperActive) await window.api.stopWallpaper()
+  else await window.api.startWallpaper()
+})
+
+$('btn-theme').addEventListener('click', () => {
+  const next = (state?.settings?.theme || 'night') === 'night' ? 'day' : 'night'
+  // мгновенный отклик, не дожидаясь ответа main-процесса
+  if (state) state.settings.theme = next
+  applyTheme()
+  window.api.setSettings({ theme: next })
+})
+
+for (const radio of document.querySelectorAll('input[name="playback-mode"]')) {
+  radio.addEventListener('change', (e) => {
+    if (e.target.checked) window.api.setSettings({ playbackMode: e.target.value })
+  })
+}
+
+$('volume').addEventListener('input', (e) => {
+  window.api.setSettings({ volume: Number(e.target.value) / 100, muted: false })
+})
+
+$('btn-mute').addEventListener('click', () => {
+  window.api.setSettings({ muted: !state.settings.muted })
+})
+
+$('interval').addEventListener('change', (e) => {
+  const v = Math.max(10, Number(e.target.value) || 300)
+  window.api.setSettings({ playlistIntervalSec: v })
+})
+
+$('display-select').addEventListener('change', (e) => {
+  window.api.setSettings({ targetDisplay: e.target.value })
+})
+
+$('pause-fullscreen').addEventListener('change', (e) => {
+  window.api.setSettings({ pauseOnFullscreen: e.target.checked })
+})
+
+$('pause-covered').addEventListener('change', (e) => {
+  window.api.setSettings({ pauseWhenCovered: e.target.checked })
+})
+
+$('pause-battery').addEventListener('change', (e) => {
+  window.api.setSettings({ pauseOnBattery: e.target.checked })
+})
+
+$('autostart').addEventListener('change', (e) => {
+  window.api.setSettings({ autostart: e.target.checked })
+})
+
+$('auto-resume').addEventListener('change', (e) => {
+  window.api.setSettings({ autoResume: e.target.checked })
+})
+
+$('btn-setup-retry').addEventListener('click', async () => {
+  $('setup-error-box').classList.add('hidden')
+  $('setup-label').textContent = t('preparing')
+  state = await window.api.retrySetup()
+  render()
+})
+
+$('btn-update-ytdlp').addEventListener('click', async () => {
+  const btn = $('btn-update-ytdlp')
+  const status = $('ytdlp-status')
+  btn.disabled = true
+  status.textContent = t('updating')
+  status.className = 'ytdlp-status'
+  const result = await window.api.updateYtDlp()
+  status.textContent = result.message
+  status.className = 'ytdlp-status ' + (result.ok ? 'ok' : 'error')
+  btn.disabled = false
+})
+
+initLangSelect()
+
+window.api.onStateUpdate((s) => {
+  state = s
+  render()
+})
+
+window.api.getState().then((s) => {
+  state = s
+  render()
+})

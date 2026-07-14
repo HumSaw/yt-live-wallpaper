@@ -1,0 +1,110 @@
+{
+  "name": "yt-live-wallpaper",
+  "version": "0.3.0",
+  "description": "Живые 4K-обои из YouTube-видео и локальных файлов — Windows, macOS, Linux",
+  "private": true,
+  "main": "src/main/main.js",
+  "license": "MIT",
+  "author": "yt-live-wallpaper contributors",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/HumSaw/animated-desktop-wallpaper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/HumSaw/animated-desktop-wallpaper/issues"
+  },
+  "keywords": [
+    "electron",
+    "wallpaper",
+    "live-wallpaper",
+    "youtube",
+    "yt-dlp",
+    "windows",
+    "workerw"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "setup": "node scripts/setup-bins.mjs",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{js,css,html}\" \"tests/**/*.js\" \"scripts/**/*.mjs\"",
+    "dist": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "koffi": "^2.9.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.7.0",
+    "prettier": "^3.9.5"
+  },
+  "build": {
+    "appId": "app.ytlivewallpaper",
+    "productName": "YT Live Wallpaper",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "YT-Live-Wallpaper-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.entertainment",
+      "artifactName": "YT-Live-Wallpaper-${version}-mac.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "YT-Live-Wallpaper-${version}-linux.${ext}"
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "koffi"
+    ]
+  }
+}

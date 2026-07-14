@@ -1,0 +1,60 @@
+# Сборка при пуше тега вида v1.2.3:
+# Windows .exe, macOS .dmg и Linux .AppImage прикрепляются к GitHub Release.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            dist: dist
+            setup: true
+          - os: macos-latest
+            dist: dist:mac
+            setup: false
+          - os: ubuntu-latest
+            dist: dist:linux
+            setup: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Только Windows: yt-dlp/ffmpeg кладутся внутрь установщика.
+      # На macOS/Linux приложение докачивает yt-dlp само, ffmpeg — из пакетного менеджера.
+      - name: Download yt-dlp and ffmpeg
+        if: matrix.setup == true
+        run: pnpm run setup
+
+      - name: Build package
+        run: pnpm run ${{ matrix.dist }}
+
+      - name: Attach artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+            dist/*.blockmap
+          generate_release_notes: true
