@@ -13,6 +13,8 @@ permissions:
 jobs:
   build:
     strategy:
+      # Падение сборки на одной ОС не должно отменять остальные
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
